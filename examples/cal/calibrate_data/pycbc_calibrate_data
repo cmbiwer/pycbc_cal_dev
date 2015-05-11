@@ -2,6 +2,9 @@
 
 import argparse
 
+from glue import lal
+from glue import segments
+
 import ROOT
 ROOT.gSystem.Load('/usr/lib64/libdmtsigp.so')
 ROOT.gSystem.Load('/usr/lib64/libgdsplot.so')
@@ -10,5 +13,15 @@ from foton import FilterFile, Filter
 # parse command line
 parser = argparse.ArgumentParser(usage='pycbc_calibrate_data [--options]',
                   description='Read the detector data and applies filters to calibrate the data.')
+parser.add_argument("--gps-start-time", type=int, required=True,
+                  help="Time to begin filtering input data.")
+parser.add_argument("--gps-end-time", type=int, required=True,
+                  help="Time to finish filtering input data.")
+parser.add_argument("--frame-cache", type=str, required=True,
+                  help="Path to frame cache that contains data.")
 opts = parser.parse_args()
 
+# read frame cache
+frame_cache = lal.Cache.fromfilenames([opts.frame_cache])
+
+print frame_cache
