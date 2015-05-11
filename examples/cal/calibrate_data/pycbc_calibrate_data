@@ -1,9 +1,11 @@
 #! /usr/bin/python
 
 import argparse
+import logging
 
 from glue import lal
 from glue import segments
+from pycbc import frame
 
 import ROOT
 ROOT.gSystem.Load('/usr/lib64/libdmtsigp.so')
@@ -21,7 +23,31 @@ parser.add_argument("--frame-cache", type=str, required=True,
                   help="Path to frame cache that contains data.")
 opts = parser.parse_args()
 
-# read frame cache
-frame_cache = lal.Cache.fromfilenames([opts.frame_cache])
+# initializations
+channel_names = []
+channel_names += ['L1:LSC-DARM_IN1_DQ']
+channel_names += ['L1:LSC-DARM_OUT_DQ']
 
-print frame_cache
+# setup log
+logging_level = logging.DEBUG
+logging.basicConfig(format='%(asctime)s : %(message)s', level=logging_level)
+
+# read frame cache
+logging.info('Reading cache file...')
+frame_cache = lal.Cache.fromfilenames([opts.frame_cache])
+frame_filenames = [entry.path for entry in frame_cache]
+
+# get channel data from frame files
+logging.info('Reading frame files...')
+data = frame.read_frame(frame_filenames, channel_names, start_time=opts.gps_start_time, end_time=opts.gps_end_time)
+
+# get filter files
+logging.info('Reading filter files...')
+filter_file = FilterFile('filter_files/L1OAF.txt')
+
+# put data into arrays
+darm_in1 = data[0].numpy()
+darm_out = data[1].numpy()
+
+# apply test filter
+darm_in1_filtered = Filter(filter_file['CAL_SUM_DARM_ERR'][0]).apply(darm_in1)
