@@ -6,6 +6,7 @@ import logging
 from glue import lal
 from glue import segments
 from pycbc import frame
+from pycbc import types
 
 import ROOT
 ROOT.gSystem.Load('/usr/lib64/libdmtsigp.so')
@@ -49,5 +50,33 @@ filter_file = FilterFile('filter_files/L1OAF.txt')
 darm_in1 = data[0].numpy()
 darm_out = data[1].numpy()
 
-# apply test filter
-darm_in1_filtered = Filter(filter_file['CAL_SUM_DARM_ERR'][0]).apply(darm_in1)
+# apply filters to DARM error
+logging.info('Filtering DARM error...')
+darm_in1_err_filtered = Filter(filter_file['CAL_SUM_DARM_ERR'][0]).apply(darm_in1)
+
+# apply filters to DARM control
+logging.info('Filtering DARM control...')
+darm_out_m0_filtered = Filter(filter_file['CAL_SUM_DARM_M0'][0]).apply(darm_out)
+darm_out_l1_filtered = Filter(filter_file['CAL_SUM_DARM_L1'][0]).apply(darm_out)
+darm_out_l2_filtered = Filter(filter_file['CAL_SUM_DARM_L2'][0]).apply(darm_out)
+darm_out_l3_filtered = Filter(filter_file['CAL_SUM_DARM_L3'][0]).apply(darm_out)
+
+# sum filtered DARM control
+logging.info('Summing filtered DARM control...')
+sum_darm_out_filtered = []
+for i in range(len(darm_out_m0_filtered)):
+    sum_darm_out_filtered.append( darm_out_m0_filtered[i] + darm_out_l1_filtered[i] + darm_out_l2_filtered[i] + darm_out_l3_filtered[i] )
+
+# sum filtered error and filtered control
+logging.info('Summing filtered DARM control and filtered error...')
+sum_darm_filtered = []
+for i in range(len(sum_darm_out_filtered)):
+    sum_darm_filtered.append( sum_darm_out_filtered[i] + darm_in1_err_filtered[i] )
+
+# write output
+logging.info('Writing data...')
+output_data = types.TimeSeries(sum_darm_filtered, delta_t=data[0].delta_t, epoch=data[0].start_time)
+output_data.save('output/test.txt')
+
+# exit
+logging.info('Done.')
