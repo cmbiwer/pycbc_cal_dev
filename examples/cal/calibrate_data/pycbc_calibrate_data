@@ -23,6 +23,8 @@ parser.add_argument("--gps-end-time", type=int, required=True,
                   help="Time to finish filtering input data.")
 parser.add_argument("--frame-cache", type=str, required=True,
                   help="Path to frame cache that contains data.")
+parser.add_argument("--filter-file", type=str, required=True,
+                  help="Path to foton filter file to extract filterbanks.")
 opts = parser.parse_args()
 
 # initializations
@@ -45,7 +47,7 @@ data = frame.read_frame(frame_filenames, channel_names, start_time=opts.gps_star
 
 # get filter files
 logging.info('Reading filter files...')
-filter_file = FilterFile('filter_files/L1OAF.txt')
+filter_file = FilterFile(opts.filter_file)
 
 # put data into arrays
 darm_in1 = data[0].numpy()
