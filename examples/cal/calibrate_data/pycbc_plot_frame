@@ -3,13 +3,14 @@
 import argparse
 import logging
 import matplotlib.pyplot as plt
+import sys
 
 from glue import lal
 from pycbc import frame
 from pycbc import types
 
 # initializations
-channel_name = 'L1:OAF-CAL_DARM_DQ'
+channel_name = sys.argv[1]
 
 # setup log
 logging_level = logging.DEBUG
@@ -27,6 +28,6 @@ data.save('output/frame.txt')
 
 # plot
 timeseries = types.load_timeseries('output/frame.txt')
-plt.plot(timeseries.sample_times, timeseries.numpy())
+plt.scatter(timeseries.sample_times, timeseries.numpy())
 print 'showing plot'
 plt.show()
