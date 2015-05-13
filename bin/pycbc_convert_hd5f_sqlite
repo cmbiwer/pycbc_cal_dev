@@ -62,7 +62,7 @@ def sqlite_create_table(table):
     # construct the SQLite query string
     sqlquery = """
     CREATE TABLE %s(%s);
-    """%(table_name, ','.join([col_name+' '+col_type for col_name,col_type in columns]))
+    """%(table_name, ', '.join([col_name+' '+col_type for col_name,col_type in columns]))
 
     return sqlquery
 
@@ -96,31 +96,28 @@ ifo2 = data.attrs['detector_2']
 # get IFO single inspiral trigger IDs
 trigger_ids_1 = data['foreground']['trigger_id1'][:]
 trigger_ids_2 = data['foreground']['trigger_id2'][:]
+num_coinc_trigs = data['foreground']['trigger_id1'].len()
 
 # create coinc_event_map table
 logging.info('Creating coinc_event_map table...')
 sqlquery = sqlite_create_table(dbtables.lsctables.CoincMapTable)
 cur.execute(sqlquery)
 
-# loop over size of arrays
+# construct an array for event_id
+event_id  = ['sngl_inspiral:event_id:'+ifo1+str(trigger_ids_1[i]) for i in range(num_coinc_trigs)]
+event_id += ['sngl_inspiral:event_id:'+ifo2+str(trigger_ids_2[i]) for i in range(num_coinc_trigs)]
+
+# construct an array for table_name and coinc_event_id
+table_name     = ['sngl_inspiral' for i in range(num_coinc_trigs)]
+coinc_event_id = ['coinc_event:coinc_event_id:'+str(i) for i in range(num_coinc_trigs)]
+
+# insert into coinc_map_table triggers
 logging.info('Populating coinc_event_map table...')
-for i in range(data['foreground']['trigger_id1'].len()):
-
-    # loop over detectors
-    for trigger_ids in [trigger_ids_1, trigger_ids_2]:
-
-        # create dict of values to insert
-        args = {'event_id'       : 'sngl_inspiral:event_id:'+str(trigger_ids[i]),
-                'table_name'     : 'sngl_inspiral',
-                'coinc_event_id' : 'coinc_event:coinc_event_id:'+str(i),
-        }
-
-        # append row to table for each single IFO trigger
-        # that was found in coincidence
-        sqlquery = """
-        INSERT INTO coinc_event_map VALUES ("{event_id}", "{table_name}", "{coinc_event_id}");
-        """.format(**args)
-        cur.execute(sqlquery)
+column_names = ['event_id', 'table_name', 'coinc_event_id']
+sqlquery = """
+INSERT INTO coinc_event_map(%s) VALUES (?, ?, ?);
+"""%', '.join(column_names)
+cur.executemany(sqlquery, zip(event_id, table_name, coinc_event_id))
 
 ###############################################################################
 # sngl_inspiral
@@ -130,6 +127,7 @@ for i in range(data['foreground']['trigger_id1'].len()):
 logging.info('Creating sngl_inspiral table...')
 sqlquery = sqlite_create_table(dbtables.lsctables.SnglInspiralTable)
 cur.execute(sqlquery)
+print sqlquery
 
 # save database and exit
 logging.info('Done.')
