@@ -1,0 +1,37 @@
+#! /usr/bin/python
+
+# Copyright (C) 2014 Christopher M. Biwer
+#
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+# option) any later version.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Generals
+# Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+
+import argparse
+import h5py
+import logging
+import sqlite
+
+# parse command line
+parser = argparse.ArgumentParser(usage='pycbc_convert_hdf5_sqlite [--options]',
+                  description="Read HDF5 files with inspiral, coincidence, \
+                  and injection data to produce a sqlite database that obeys \
+                  the LIGO schema.")
+opts = parser.parse_args()
+
+# initializations
+filename_tmpltbank = '/home/ahnitz/projects/BNS/snrthreshold/mdc/ns/SNR_5.0/bank/H1L1-BANK2HDF-966384015-1000000.hdf'
+filename_sngl_h1 = '/home/ahnitz/projects/BNS/snrthreshold/mdc/ns/SNR_5.0/full_data/H1-HDF_TRIGGER_MERGE_FULL_DATA-966384015-1000000.hdf'
+filename_sngl_l1 = '/home/ahnitz/projects/BNS/snrthreshold/mdc/ns/SNR_5.0/full_data/L1-HDF_TRIGGER_MERGE_FULL_DATA-966384015-1000000.hdf'
+filename_coinc = '/home/ahnitz/projects/BNS/snrthreshold/mdc/ns/SNR_5.0/full_data/H1L1-STATMAP_FULL_DATA_FULL_12H-966384015-1000000.hdf'
+filenames_inj = ['']
+
