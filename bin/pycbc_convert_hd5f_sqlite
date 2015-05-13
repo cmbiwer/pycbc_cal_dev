@@ -22,14 +22,7 @@ import logging
 import sqlite3
 import sys
 
-import sqlite_utils
-
-# parse command line
-parser = argparse.ArgumentParser(usage='pycbc_convert_hdf5_sqlite [--options]',
-                  description="Read HDF5 files with inspiral, coincidence, \
-                  and injection data to produce a sqlite database that obeys \
-                  the LIGO schema.")
-opts = parser.parse_args()
+from glue.ligolw import dbtables
 
 # initializations
 filename_db = 'test.db'
@@ -41,10 +34,53 @@ filenames_inj = ['']
 filenames_segments = ''
 filenames_vetoes  = ['']
 
+def sqlite_create_table(table):
+    """
+    Returns a string with the SQLite command to create
+    the LIGOLW table in the database.
+    """
+
+    table_name   = table.tableName.replace(':table', '')
+    validcolumns = table.validcolumns
+
+    columns = []
+    for col_name,col_type in validcolumns.iteritems():
+        if col_type is 'int_4s':
+            col_type = 'INTEGER'
+        elif col_type in ['real_4', 'real_8']:
+            col_type = 'REAL'
+        elif col_type in ['ilwd:char', 'lstring', 'char_v']:
+            col_type = 'TEXT'
+        else:
+            logging.info('Unknown column type of '+col_type+' for '+col_name+'.')
+            sys.exit()
+        columns.append( (col_name, col_type) )
+
+    sqlquery = """
+    CREATE TABLE %s(%s);
+    """%(table_name, ','.join([col_name+' '+col_type for col_name,col_type in columns]))
+
+    return sqlquery
+
+# parse command line
+parser = argparse.ArgumentParser(usage='pycbc_convert_hdf5_sqlite [--options]',
+                  description="Read HDF5 files with inspiral, coincidence, \
+                  and injection data to produce a sqlite database that obeys \
+                  the LIGO schema.")
+opts = parser.parse_args()
+
+# create log
+logging_level = logging.DEBUG
+logging.basicConfig(format='%(asctime)s : %(message)s', level=logging_level)
+
 # create sqlite database
 logging.info('Creating database...')
 con = sqlite3.connect(filename_db)
 cur = con.cursor()
+
+###############################################################################
+# coinc_event_map
+###############################################################################
 
 # read HDF5 coincidence file
 data = h5py.File(filename_coinc, 'r')
@@ -59,14 +95,11 @@ trigger_ids_2 = data['foreground']['trigger_id2'][:]
 
 # create coinc_event_map table
 logging.info('Creating coinc_event_map table...')
-sqlquery = """
-CREATE TABLE coinc_event_map(event_id TEXT, table_name TEXT, coinc_event_id TEXT);
-"""
+sqlquery = sqlite_create_table(dbtables.lsctables.CoincMapTable)
 cur.execute(sqlquery)
 
 # loop over size of arrays
 logging.info('Populating coinc_event_map table...')
-print dir(data['foreground']['trigger_id1'])
 for i in range(data['foreground']['trigger_id1'].len()):
 
     # loop over detectors
@@ -85,8 +118,17 @@ for i in range(data['foreground']['trigger_id1'].len()):
         """.format(**args)
         cur.execute(sqlquery)
 
+###############################################################################
+# sngl_inspiral
+###############################################################################
+
+# create sngl_inspiral table
+logging.info('Creating sngl_inspiral table...')
+sqlquery = sqlite_create_table(dbtables.lsctables.SnglInspiralTable)
+cur.execute(sqlquery)
 
 # save database and exit
+logging.info('Done.')
 con.commit()
 con.close()
 sys.exit()
@@ -105,70 +147,3 @@ sys.exit()
 #coinc_inspiral      process             segment_definer     time_slide        
 #experiment          process_params      segment_summary     veto_definer    
 
-# sngl inspiral columns
-"""
-0|cont_chisq|REAL|0||0
-1|bank_chisq|REAL|0||0
-2|chisq_dof|INTEGER|0||0
-3|end_time_gmst|REAL|0||0
-4|event_duration|REAL|0||0
-5|chisq|REAL|0||0
-6|spin1y|REAL|0||0
-7|spin1x|REAL|0||0
-8|alpha|REAL|0||0
-9|coa_phase|REAL|0||0
-10|alpha2|REAL|0||0
-11|mchirp|REAL|0||0
-12|alpha1|REAL|0||0
-13|alpha6|REAL|0||0
-14|alpha4|REAL|0||0
-15|alpha5|REAL|0||0
-16|event_id|TEXT|0||1
-17|chi|REAL|0||0
-18|cont_chisq_dof|INTEGER|0||0
-19|spin2y|REAL|0||0
-20|tau2|REAL|0||0
-21|tau3|REAL|0||0
-22|tau0|REAL|0||0
-23|tau4|REAL|0||0
-24|tau5|REAL|0||0
-25|template_duration|REAL|0||0
-26|impulse_time|INTEGER|0||0
-27|impulse_time_ns|INTEGER|0||0
-28|rsqveto_duration|REAL|0||0
-29|channel|TEXT|0||0
-30|mtotal|REAL|0||0
-G31|alpha3|REAL|0||0
-32|spin1z|REAL|0||0
-33|Gamma5|REAL|0||0
-34|spin2x|REAL|0||0
-35|f_final|REAL|0||0
-36|beta|REAL|0||0
-37|process_id|TEXT|0||0
-38|snr|REAL|0||0
-39|bank_chisq_dof|INTEGER|0||0
-40|kappa|REAL|0||0
-41|eff_distance|REAL|0||0
-42|Gamma7|REAL|0||0
-43|Gamma6|REAL|0||0
-44|search|TEXT|0||0
-45|Gamma4|REAL|0||0
-46|mass1|REAL|0||0
-47|Gamma2|REAL|0||0
-48|Gamma1|REAL|0||0
-49|mass2|REAL|0||0
-50|ttotal|REAL|0||0
-51|Gamma0|REAL|0||0
-52|spin2z|REAL|0||0
-53|Gamma9|REAL|0||0
-54|Gamma8|REAL|0||0
-55|Gamma3|REAL|0||0
-56|eta|REAL|0||0
-57|psi0|REAL|0||0
-58|end_time|INTEGER|0||0
-59|amplitude|REAL|0||0
-60|psi3|REAL|0||0
-61|end_time_ns|INTEGER|0||0
-62|ifo|TEXT|0||0
-63|sigmasq|REAL|0||0
-"""
