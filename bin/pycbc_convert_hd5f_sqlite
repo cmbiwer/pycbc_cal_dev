@@ -133,12 +133,9 @@ trigger_ids_1 = data['foreground']['trigger_id1'][:]
 trigger_ids_2 = data['foreground']['trigger_id2'][:]
 data.close()
 
-# create coinc_event_map table in databse and a dict with column names as key
+# create coinc_event_map table in database and a dict with column names as key
 logging.info('Creating coinc_event_map table...')
 tmp = sqlite_create_table(dbtables.lsctables.CoincMapTable)
-
-# key a dict on the column names of the table
-tmp = make_table_dict(dbtables.lsctables.CoincMapTable, num_coinc_trigs)
 
 # construct an array for event_id
 tmp['event_id']  = ['sngl_inspiral:event_id:'+ifo1+str(trigger_ids_1[i]) for i in range(num_coinc_trigs)]
@@ -158,7 +155,7 @@ sqlite_insert_into_table(dbtables.lsctables.CoincMapTable, tmp)
 # coinc_event
 ###############################################################################
 
-# create coinc_event table in databse and a dict with column names as key
+# create coinc_event table in database and a dict with column names as key
 logging.info('Creating coinc_event table...')
 tmp = sqlite_create_table(dbtables.lsctables.CoincTable)
 
