@@ -262,6 +262,9 @@ for i in range(2):
     trigger_id = trigger_id_list[i]
     tmp = tmp_list[i]
 
+    # construct an array for event_id
+    tmp['event_id']  = ['sngl_inspiral:event_id:'+ifo+':'+str(trigger_id[i]) for i in range(num_coinc_trigs)]
+
     # construct an array for ifo
     tmp['ifo'] = np.array([ifo for j in range(num_coinc_trigs)])
 
@@ -300,7 +303,7 @@ for i in range(2):
     tmp['spin2z'] = data_tmpltbank['spin2z'][:][template_id]
 
 # columns not added yet
-#end_time_gmst REAL, event_duration REAL, chisq REAL, spin1y REAL, spin1x REAL, alpha REAL, alpha2 REAL, alpha1 REAL, alpha6 REAL, alpha4 REAL, alpha5 REAL, event_id TEXT, chi REAL, spin2y REAL, tau2 REAL, tau3 REAL, tau0 REAL, tau4 REAL, tau5 REAL, template_duration REAL, impulse_time INTEGER, impulse_time_ns INTEGER, rsqveto_duration REAL, channel TEXT, mtotal REAL, alpha3 REAL, Gamma5 REAL, spin2x REAL, f_final REAL, beta REAL, process_id TEXT, kappa REAL, eff_distance REAL, Gamma7 REAL, Gamma6 REAL, search TEXT, Gamma4 REAL, Gamma2 REAL, Gamma1 REAL, ttotal REAL, Gamma0 REAL, Gamma9 REAL, Gamma8 REAL, Gamma3 REAL, psi0 REAL, amplitude REAL, psi3 REAL
+#end_time_gmst REAL, event_duration REAL, spin1y REAL, spin1x REAL, alpha REAL, alpha2 REAL, alpha1 REAL, alpha6 REAL, alpha4 REAL, alpha5 REAL, chi REAL, spin2y REAL, tau2 REAL, tau3 REAL, tau0 REAL, tau4 REAL, tau5 REAL, template_duration REAL, impulse_time INTEGER, impulse_time_ns INTEGER, rsqveto_duration REAL, channel TEXT, alpha3 REAL, Gamma5 REAL, spin2x REAL, f_final REAL, beta REAL, process_id TEXT, kappa REAL, eff_distance REAL, Gamma7 REAL, Gamma6 REAL, search TEXT, Gamma4 REAL, Gamma2 REAL, Gamma1 REAL, ttotal REAL, Gamma0 REAL, Gamma9 REAL, Gamma8 REAL, Gamma3 REAL, psi0 REAL, amplitude REAL, psi3 REAL
 
 # all columns
 #cont_chisq REAL, bank_chisq REAL, chisq_dof INTEGER, end_time_gmst REAL, event_duration REAL, chisq REAL, spin1y REAL, spin1x REAL, alpha REAL, coa_phase REAL, alpha2 REAL, mchirp REAL, alpha1 REAL, alpha6 REAL, alpha4 REAL, alpha5 REAL, event_id TEXT, chi REAL, cont_chisq_dof INTEGER, spin2y REAL, tau2 REAL, tau3 REAL, tau0 REAL, tau4 REAL, tau5 REAL, template_duration REAL, impulse_time INTEGER, impulse_time_ns INTEGER, rsqveto_duration REAL, channel TEXT, mtotal REAL, alpha3 REAL, spin1z REAL, Gamma5 REAL, spin2x REAL, f_final REAL, beta REAL, process_id TEXT, snr REAL, bank_chisq_dof INTEGER, kappa REAL, eff_distance REAL, Gamma7 REAL, Gamma6 REAL, search TEXT, Gamma4 REAL, mass1 REAL, Gamma2 REAL, Gamma1 REAL, mass2 REAL, ttotal REAL, Gamma0 REAL, spin2z REAL, Gamma9 REAL, Gamma8 REAL, Gamma3 REAL, eta REAL, psi0 REAL, end_time INTEGER, amplitude REAL, psi3 REAL, end_time_ns INTEGER, ifo TEXT, sigmasq REAL
