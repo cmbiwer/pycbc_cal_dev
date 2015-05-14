@@ -89,11 +89,18 @@ def sqlite_insert_into_table(table, tmp):
             column_names.append(key)
             column_values.append(val)
 
-    # add rows into table
-    sqlquery = """
-    INSERT INTO %s(%s) VALUES (%s);
-    """%( table_name, ', '.join(column_names), ', '.join(['?'] * len(column_names)) )
-    cur.executemany(sqlquery, zip(*column_values))
+    # check if there are any non-empty columns to be added
+    if len(column_names):
+
+        # add rows into table
+        sqlquery = """
+        INSERT INTO %s(%s) VALUES (%s);
+        """%( table_name, ', '.join(column_names), ', '.join(['?'] * len(column_names)) )
+        cur.executemany(sqlquery, zip(*column_values))
+
+    # else warning that there were no rows added
+    else:
+        logging.warn('No rows were added to the %s table...'%table_name)
 
 # parse command line
 parser = argparse.ArgumentParser(usage='pycbc_convert_hdf5_sqlite [--options]',
@@ -166,7 +173,7 @@ tmp['coinc_event_id'] = coinc_event_id
 tmp['instruments'] = np.array([','.join([ifo1, ifo2]) for i in range(num_coinc_trigs)])
 
 # construct an array for nevents
-tmp['nevents'] = np.array([2 for i in range(num_coinc_trigs)], dtype=np.integer)
+tmp['nevents'] = np.array([2 for i in range(num_coinc_trigs)])
 
 # construct an array for process_id
 # FIXME: add this, is this used even?
@@ -188,9 +195,25 @@ sqlite_insert_into_table(dbtables.lsctables.CoincTable, tmp)
 # coinc_inspiral
 ###############################################################################
 
+# create coinc_event table in database and a dict with column names as key
+logging.info('Creating coinc_inspiral table...')
+tmp = sqlite_create_table(dbtables.lsctables.CoincInspiralTable)
+
+# insert rows into coinc_map_table
+logging.info('Populating coinc_inspiral table...')
+sqlite_insert_into_table(dbtables.lsctables.CoincInspiralTable, tmp)
+
 ###############################################################################
 # sngl_inspiral
 ###############################################################################
+
+# create coinc_event table in database and a dict with column names as key
+logging.info('Creating sngl_inspiral table...')
+tmp = sqlite_create_table(dbtables.lsctables.SnglInspiralTable)
+
+# insert rows into coinc_map_table
+logging.info('Populating sngl_inspiral table...')
+sqlite_insert_into_table(dbtables.lsctables.SnglInspiralTable, tmp)
 
 #cont_chisq REAL, bank_chisq REAL, chisq_dof INTEGER, end_time_gmst REAL, event_duration REAL, chisq REAL, spin1y REAL, spin1x REAL, alpha REAL, coa_phase REAL, alpha2 REAL, mchirp REAL, alpha1 REAL, alpha6 REAL, alpha4 REAL, alpha5 REAL, event_id TEXT, chi REAL, cont_chisq_dof INTEGER, spin2y REAL, tau2 REAL, tau3 REAL, tau0 REAL, tau4 REAL, tau5 REAL, template_duration REAL, impulse_time INTEGER, impulse_time_ns INTEGER, rsqveto_duration REAL, channel TEXT, mtotal REAL, alpha3 REAL, spin1z REAL, Gamma5 REAL, spin2x REAL, f_final REAL, beta REAL, process_id TEXT, snr REAL, bank_chisq_dof INTEGER, kappa REAL, eff_distance REAL, Gamma7 REAL, Gamma6 REAL, search TEXT, Gamma4 REAL, mass1 REAL, Gamma2 REAL, Gamma1 REAL, mass2 REAL, ttotal REAL, Gamma0 REAL, spin2z REAL, Gamma9 REAL, Gamma8 REAL, Gamma3 REAL, eta REAL, psi0 REAL, end_time INTEGER, amplitude REAL, psi3 REAL, end_time_ns INTEGER, ifo TEXT, sigmasq REAL
 
