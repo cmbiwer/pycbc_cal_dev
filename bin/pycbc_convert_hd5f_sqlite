@@ -24,6 +24,7 @@ import sqlite3
 import sys
 
 from glue.ligolw import dbtables
+from pycbc import pnutils
 
 # initializations
 filename_db = 'test.db'
@@ -116,6 +117,7 @@ logging.basicConfig(format='%(asctime)s : %(message)s', level=logging_level)
 # create sqlite database
 logging.info('Creating database...')
 con = sqlite3.connect(filename_db)
+con.row_factory = sqlite3.Row
 cur = con.cursor()
 
 # tell sqlite3 about numpy int datatypes
@@ -128,31 +130,31 @@ for t in (np.int8, np.int16, np.int32, np.int64, np.uint8,
 ###############################################################################
 
 # read HDF5 coincidence file
-data = h5py.File(filename_coinc, 'r')
+data_coinc = h5py.File(filename_coinc, 'r')
 
 # get IFO names
-ifo1 = data.attrs['detector_1']
-ifo2 = data.attrs['detector_2']
+ifo1 = data_coinc.attrs['detector_1']
+ifo2 = data_coinc.attrs['detector_2']
 
 # get IFO single inspiral trigger IDs
-num_coinc_trigs = data['foreground']['trigger_id1'].len()
-trigger_ids_1 = data['foreground']['trigger_id1'][:]
-trigger_ids_2 = data['foreground']['trigger_id2'][:]
-data.close()
+# FIXME: should not get all data at once but will for dev purposes
+num_coinc_trigs = data_coinc['foreground']['trigger_id1'].len()
+trigger_ids_1 = data_coinc['foreground']['trigger_id1'][:]
+trigger_ids_2 = data_coinc['foreground']['trigger_id2'][:]
+template_id = data_coinc['foreground']['template_id'][:]
 
 # create coinc_event_map table in database and a dict with column names as key
 logging.info('Creating coinc_event_map table...')
 tmp = sqlite_create_table(dbtables.lsctables.CoincMapTable)
 
 # construct an array for event_id
-tmp['event_id']  = ['sngl_inspiral:event_id:'+ifo1+str(trigger_ids_1[i]) for i in range(num_coinc_trigs)]
-tmp['event_id'] += ['sngl_inspiral:event_id:'+ifo2+str(trigger_ids_2[i]) for i in range(num_coinc_trigs)]
+tmp['event_id']  = ['sngl_inspiral:event_id:'+ifo1+':'+str(trigger_ids_1[i]) for i in range(num_coinc_trigs)]
+tmp['event_id'] += ['sngl_inspiral:event_id:'+ifo2+':'+str(trigger_ids_2[i]) for i in range(num_coinc_trigs)]
 tmp['event_id']  = np.array(tmp['event_id'])
 
 # construct an array for table_name and coinc_event_id
 tmp['table_name']     = np.array(['sngl_inspiral' for i in range(num_coinc_trigs)])
-coinc_event_id        = np.array(['coinc_event:coinc_event_id:'+str(i) for i in range(num_coinc_trigs)])
-tmp['coinc_event_id'] = coinc_event_id
+tmp['coinc_event_id'] = np.array(['coinc_event:coinc_event_id:'+str(i) for i in range(num_coinc_trigs)])
 
 # insert rows into coinc_map_table
 logging.info('Populating coinc_event_map table...')
@@ -167,7 +169,8 @@ logging.info('Creating coinc_event table...')
 tmp = sqlite_create_table(dbtables.lsctables.CoincTable)
 
 # construct an array for coinc_event_id
-tmp['coinc_event_id'] = coinc_event_id
+rows = cur.execute('SELECT coinc_event_id FROM coinc_event_map').fetchall()
+tmp['coinc_event_id'] = np.array([row['coinc_event_id'] for row in rows])
 
 # construct an array for instruments
 tmp['instruments'] = np.array([','.join([ifo1, ifo2]) for i in range(num_coinc_trigs)])
@@ -195,9 +198,40 @@ sqlite_insert_into_table(dbtables.lsctables.CoincTable, tmp)
 # coinc_inspiral
 ###############################################################################
 
+# read HDF5 tmpltbank file
+data_tmpltbank = h5py.File(filename_tmpltbank, 'r')
+
 # create coinc_event table in database and a dict with column names as key
 logging.info('Creating coinc_inspiral table...')
 tmp = sqlite_create_table(dbtables.lsctables.CoincInspiralTable)
+
+# construct an array for coinc_event_id and ifos
+rows = cur.execute('SELECT coinc_event_id, instruments FROM coinc_event').fetchall()
+tmp['coinc_event_id'] = np.array([row['coinc_event_id'] for row in rows])
+tmp['ifos'] = np.array([row['instruments'] for row in rows])
+
+# construct an array for false_alarm_rate
+tmp['false_alarm_rate'] = np.array([1./ifar for ifar in data_coinc['foreground']['ifar'][:]])
+
+# construct an array for minimum_duration
+# FIXME: add this
+
+# construct an array for mass and mchirp
+tmp['mass']   = np.empty(num_coinc_trigs)
+tmp['mchirp'] = np.empty(num_coinc_trigs)
+for i in range(num_coinc_trigs):
+    tmplt_id = template_id[i]
+    mass1 = data_tmpltbank['mass1'][tmplt_id]
+    mass2 = data_tmpltbank['mass2'][tmplt_id]
+    tmp['mass'][i] = mass1 + mass2
+    mchirp, _ = pnutils.mass1_mass2_to_mchirp_eta(mass1, mass2) 
+    tmp['mchirp'][i] = mchirp
+
+# construct an array for end_time and end_time_ns
+# FIXME: add this
+
+# construct an array for combined_far
+# FIXME: add this
 
 # insert rows into coinc_map_table
 logging.info('Populating coinc_inspiral table...')
