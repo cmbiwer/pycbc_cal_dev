@@ -125,6 +125,10 @@ for t in (np.int8, np.int16, np.int32, np.int64, np.uint8,
           np.uint16, np.uint32, np.uint64):
    sqlite3.register_adapter(t, long)
 
+# tell sqlite3 about numpy float datatypes
+for t in (np.float32,):
+   sqlite3.register_adapter(t, float)
+
 ###############################################################################
 # coinc_event_map
 ###############################################################################
@@ -139,8 +143,8 @@ ifo2 = data_coinc.attrs['detector_2']
 # get IFO single inspiral trigger IDs
 # FIXME: should not get all data at once but will for dev purposes
 num_coinc_trigs = data_coinc['foreground']['trigger_id1'].len()
-trigger_ids_1 = data_coinc['foreground']['trigger_id1'][:]
-trigger_ids_2 = data_coinc['foreground']['trigger_id2'][:]
+trigger_ids_1 =data_coinc['foreground']['trigger_id1'][:]
+trigger_ids_2 =data_coinc['foreground']['trigger_id2'][:]
 template_id = data_coinc['foreground']['template_id'][:]
 
 # create coinc_event_map table in database and a dict with column names as key
@@ -217,15 +221,12 @@ tmp['false_alarm_rate'] = np.array([1./ifar for ifar in data_coinc['foreground']
 # FIXME: add this
 
 # construct an array for mass and mchirp
-tmp['mass']   = np.empty(num_coinc_trigs)
-tmp['mchirp'] = np.empty(num_coinc_trigs)
-for i in range(num_coinc_trigs):
-    tmplt_id = template_id[i]
-    mass1 = data_tmpltbank['mass1'][tmplt_id]
-    mass2 = data_tmpltbank['mass2'][tmplt_id]
-    tmp['mass'][i] = mass1 + mass2
-    mchirp, _ = pnutils.mass1_mass2_to_mchirp_eta(mass1, mass2) 
-    tmp['mchirp'][i] = mchirp
+template_id = data_coinc['foreground']['template_id'][:]
+mass1 = data_tmpltbank['mass1'][:][template_id]
+mass2 = data_tmpltbank['mass2'][:][template_id]
+tmp['mass'] = mass1 + mass2
+tmp['mchirp'] = [pnutils.mass1_mass2_to_mchirp_eta(mass1, mass2)[0] for mass1,mass2 in zip(mass1,mass2)]
+
 
 # construct an array for end_time and end_time_ns
 # FIXME: add this
@@ -262,9 +263,44 @@ for i in range(2):
     trigger_id = trigger_id_list[i]
     tmp = tmp_list[i]
 
-    # contruct an array for ifo
+    # construct an array for ifo
     tmp['ifo'] = np.array([ifo for i in range(num_coinc_trigs)])
 
+    # construct an array for end_time and end_time_ns
+    end_time = data_sngl[ifo]['end_time'][:][trigger_id]
+    tmp['end_time'] = np.array([int(time) for time in end_time])
+    tmp['end_time_ns'] = np.array([int(time % 1 * 1e9) for time in end_time])
+
+    # construct an array for chi-squared values and their degrees of freedom
+    tmp['cont_chisq'] = data_sngl[ifo]['cont_chisq'][:][trigger_id]
+    tmp['cont_chisq_dof'] = map(int, data_sngl[ifo]['cont_chisq_dof'][:][trigger_id])
+    tmp['bank_chisq'] = data_sngl[ifo]['bank_chisq'][:][trigger_id]
+    tmp['bank_chisq_dof'] = map(int, data_sngl[ifo]['bank_chisq_dof'][:][trigger_id])
+    tmp['chisq'] = data_sngl[ifo]['chisq_dof'][:][trigger_id]
+    tmp['chisq_dof'] = map(int, data_sngl[ifo]['chisq_dof'][:][trigger_id])
+
+    # construct an array for snr
+    tmp['snr'] = data_sngl[ifo]['snr'][:][trigger_id]
+
+    # construct an array for coa_phase
+    tmp['coa_phase'] = data_sngl[ifo]['coa_phase'][:][trigger_id]
+
+    # construct an array for sigmasq
+    tmp['sigmasq'] = data_sngl[ifo]['sigmasq'][:][trigger_id]
+
+    # construct an array for mass quantities
+    template_id = data_sngl[ifo]['template_id'][:][trigger_id]
+    tmp['mass1'] = data_tmpltbank['mass1'][:][template_id]
+    tmp['mass2'] = data_tmpltbank['mass2'][:][template_id]
+    tmp['mtotal'] = tmp['mass1'] + tmp['mass2']
+    tmp['mchirp'] = [pnutils.mass1_mass2_to_mchirp_eta(mass1, mass2)[0] for mass1,mass2 in zip(tmp['mass1'],tmp['mass2'])]
+    tmp['eta'] = [pnutils.mass1_mass2_to_mchirp_eta(mass1, mass2)[1] for mass1,mass2 in zip(tmp['mass1'],tmp['mass2'])]
+
+
+# columns not added yet
+#end_time_gmst REAL, event_duration REAL, chisq REAL, spin1y REAL, spin1x REAL, alpha REAL, alpha2 REAL, alpha1 REAL, alpha6 REAL, alpha4 REAL, alpha5 REAL, event_id TEXT, chi REAL, spin2y REAL, tau2 REAL, tau3 REAL, tau0 REAL, tau4 REAL, tau5 REAL, template_duration REAL, impulse_time INTEGER, impulse_time_ns INTEGER, rsqveto_duration REAL, channel TEXT, mtotal REAL, alpha3 REAL, spin1z REAL, Gamma5 REAL, spin2x REAL, f_final REAL, beta REAL, process_id TEXT, kappa REAL, eff_distance REAL, Gamma7 REAL, Gamma6 REAL, search TEXT, Gamma4 REAL, Gamma2 REAL, Gamma1 REAL, ttotal REAL, Gamma0 REAL, spin2z REAL, Gamma9 REAL, Gamma8 REAL, Gamma3 REAL, psi0 REAL, amplitude REAL, psi3 REAL
+
+# all columns
 #cont_chisq REAL, bank_chisq REAL, chisq_dof INTEGER, end_time_gmst REAL, event_duration REAL, chisq REAL, spin1y REAL, spin1x REAL, alpha REAL, coa_phase REAL, alpha2 REAL, mchirp REAL, alpha1 REAL, alpha6 REAL, alpha4 REAL, alpha5 REAL, event_id TEXT, chi REAL, cont_chisq_dof INTEGER, spin2y REAL, tau2 REAL, tau3 REAL, tau0 REAL, tau4 REAL, tau5 REAL, template_duration REAL, impulse_time INTEGER, impulse_time_ns INTEGER, rsqveto_duration REAL, channel TEXT, mtotal REAL, alpha3 REAL, spin1z REAL, Gamma5 REAL, spin2x REAL, f_final REAL, beta REAL, process_id TEXT, snr REAL, bank_chisq_dof INTEGER, kappa REAL, eff_distance REAL, Gamma7 REAL, Gamma6 REAL, search TEXT, Gamma4 REAL, mass1 REAL, Gamma2 REAL, Gamma1 REAL, mass2 REAL, ttotal REAL, Gamma0 REAL, spin2z REAL, Gamma9 REAL, Gamma8 REAL, Gamma3 REAL, eta REAL, psi0 REAL, end_time INTEGER, amplitude REAL, psi3 REAL, end_time_ns INTEGER, ifo TEXT, sigmasq REAL
 
     # insert rows into coinc_map_table
