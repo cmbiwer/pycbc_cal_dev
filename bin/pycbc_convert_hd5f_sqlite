@@ -130,7 +130,7 @@ for t in (np.float32,):
    sqlite3.register_adapter(t, float)
 
 ###############################################################################
-# coinc_event_map
+# coinc maps
 ###############################################################################
 
 # read HDF5 coincidence file
@@ -140,204 +140,267 @@ data_coinc = h5py.File(filename_coinc, 'r')
 ifo1 = data_coinc.attrs['detector_1']
 ifo2 = data_coinc.attrs['detector_2']
 
-# get IFO single inspiral trigger IDs
-# FIXME: should not get all data at once but will for dev purposes
-num_coinc_trigs = data_coinc['foreground']['trigger_id1'].len()
-trigger_ids_1 =data_coinc['foreground']['trigger_id1'][:]
-trigger_ids_2 =data_coinc['foreground']['trigger_id2'][:]
-template_id = data_coinc['foreground']['template_id'][:]
+# get names of datasets
+dataset_list = ['foreground', 'background']
 
 # create coinc_event_map table in database and a dict with column names as key
 logging.info('Creating coinc_event_map table...')
-tmp = sqlite_create_table(dbtables.lsctables.CoincMapTable)
-
-# construct an array for event_id
-tmp['event_id']  = ['sngl_inspiral:event_id:'+ifo1+':'+str(trigger_ids_1[i]) for i in range(num_coinc_trigs)]
-tmp['event_id'] += ['sngl_inspiral:event_id:'+ifo2+':'+str(trigger_ids_2[i]) for i in range(num_coinc_trigs)]
-tmp['event_id']  = np.array(tmp['event_id'])
-
-# construct an array for table_name and coinc_event_id
-tmp['table_name']     = np.array(['sngl_inspiral' for i in range(num_coinc_trigs)])
-tmp['coinc_event_id'] = np.array(['coinc_event:coinc_event_id:'+str(i) for i in range(num_coinc_trigs)])
-
-# insert rows into coinc_event_map table
-logging.info('Populating coinc_event_map table...')
-sqlite_insert_into_table(dbtables.lsctables.CoincMapTable, tmp)
-
-###############################################################################
-# coinc_event
-###############################################################################
+coinc_event_map = sqlite_create_table(dbtables.lsctables.CoincMapTable)
 
 # create coinc_event table in database and a dict with column names as key
 logging.info('Creating coinc_event table...')
-tmp = sqlite_create_table(dbtables.lsctables.CoincTable)
-
-# construct an array for coinc_event_id
-rows = cur.execute('SELECT coinc_event_id FROM coinc_event_map').fetchall()
-tmp['coinc_event_id'] = np.array([row['coinc_event_id'] for row in rows])
-
-# construct an array for instruments
-tmp['instruments'] = np.array([','.join([ifo1, ifo2]) for i in range(num_coinc_trigs)])
-
-# construct an array for nevents
-tmp['nevents'] = np.array([2 for i in range(num_coinc_trigs)])
-
-# construct an array for process_id
-# FIXME: add this, is this used even?
-
-# construct an array for coinc_def_id
-# FIXME: add this
-
-# construct an array for time_slide_id
-# FIXME: add this
-
-# construct an array likelihood
-# likelihood doesn't appear to be populated in old databases
-
-# insert rows into coinc_map table
-logging.info('Populating coinc_event table...')
-sqlite_insert_into_table(dbtables.lsctables.CoincTable, tmp)
-
-###############################################################################
-# coinc_inspiral
-###############################################################################
-
-# read HDF5 tmpltbank file
-data_tmpltbank = h5py.File(filename_tmpltbank, 'r')
+coinc_event = sqlite_create_table(dbtables.lsctables.CoincTable)
 
 # create coinc_event table in database and a dict with column names as key
 logging.info('Creating coinc_inspiral table...')
-tmp = sqlite_create_table(dbtables.lsctables.CoincInspiralTable)
-
-# construct an array for coinc_event_id and ifos
-rows = cur.execute('SELECT coinc_event_id, instruments FROM coinc_event').fetchall()
-tmp['coinc_event_id'] = np.array([row['coinc_event_id'] for row in rows])
-tmp['ifos'] = np.array([row['instruments'] for row in rows])
-
-# construct an array for false_alarm_rate
-tmp['false_alarm_rate'] = np.array([1./ifar for ifar in data_coinc['foreground']['ifar'][:]])
-
-# construct an array for minimum_duration
-# FIXME: add this; is this used?
-
-# construct an array for mass and mchirp
-template_id = data_coinc['foreground']['template_id'][:]
-mass1 = data_tmpltbank['mass1'][:][template_id]
-mass2 = data_tmpltbank['mass2'][:][template_id]
-tmp['mass'] = mass1 + mass2
-tmp['mchirp'] = [pnutils.mass1_mass2_to_mchirp_eta(mass1, mass2)[0] for mass1,mass2 in zip(mass1,mass2)]
-
-# construct an array for end_time and end_time_ns
-# FIXME: add this
-
-# construct an array for combined_far
-# FIXME: add this
-
-# insert rows into coinc_inspiral table
-logging.info('Populating coinc_inspiral table...')
-sqlite_insert_into_table(dbtables.lsctables.CoincInspiralTable, tmp)
-
-###############################################################################
-# sngl_inspiral
-###############################################################################
+coinc_inspiral = sqlite_create_table(dbtables.lsctables.CoincInspiralTable)
 
 # create coinc_event table in database and a dict with column names as key
 logging.info('Creating sngl_inspiral table...')
-tmp1 = sqlite_create_table(dbtables.lsctables.SnglInspiralTable)
-tmp2 = tmp1
-
-# make lists of IFO-dependent data to index
-# FIXME: this needs to be more robust for n detectors
-ifo_list = [ifo1, ifo2]
-trigger_id_list = [trigger_ids_1, trigger_ids_2]
-tmp_list = [tmp1, tmp2]
-
-# loop over IFO IDs
-for i in range(len(ifo_list)):
-
-    # read HDF5 tmpltbank file
-    data_sngl = h5py.File(filenames_sngl[i], 'r')
-
-    # get IFO-dependent data
-    ifo = ifo_list[i]
-    trigger_id = trigger_id_list[i]
-    tmp = tmp_list[i]
-
-    # construct an array for event_id
-    tmp['event_id']  = ['sngl_inspiral:event_id:'+ifo+':'+str(trigger_id[i]) for i in range(num_coinc_trigs)]
-
-    # construct an array for ifo
-    tmp['ifo'] = np.array([ifo for j in range(num_coinc_trigs)])
-
-    # construct an array for end_time and end_time_ns
-    end_time = data_sngl[ifo]['end_time'][:][trigger_id]
-    tmp['end_time'] = np.array([int(time) for time in end_time])
-    tmp['end_time_ns'] = np.array([int(time % 1 * 1e9) for time in end_time])
-
-    # construct an array for chi-squared values and their degrees of freedom
-    tmp['cont_chisq'] = data_sngl[ifo]['cont_chisq'][:][trigger_id]
-    tmp['cont_chisq_dof'] = map(int, data_sngl[ifo]['cont_chisq_dof'][:][trigger_id])
-    tmp['bank_chisq'] = data_sngl[ifo]['bank_chisq'][:][trigger_id]
-    tmp['bank_chisq_dof'] = map(int, data_sngl[ifo]['bank_chisq_dof'][:][trigger_id])
-    tmp['chisq'] = data_sngl[ifo]['chisq_dof'][:][trigger_id]
-    tmp['chisq_dof'] = map(int, data_sngl[ifo]['chisq_dof'][:][trigger_id])
-
-    # construct an array for snr
-    tmp['snr'] = data_sngl[ifo]['snr'][:][trigger_id]
-
-    # construct an array for coa_phase
-    tmp['coa_phase'] = data_sngl[ifo]['coa_phase'][:][trigger_id]
-
-    # construct an array for sigmasq
-    tmp['sigmasq'] = data_sngl[ifo]['sigmasq'][:][trigger_id]
-
-    # construct an array for mass quantities
-    template_id = data_sngl[ifo]['template_id'][:][trigger_id]
-    tmp['mass1'] = data_tmpltbank['mass1'][:][template_id]
-    tmp['mass2'] = data_tmpltbank['mass2'][:][template_id]
-    tmp['mtotal'] = tmp['mass1'] + tmp['mass2']
-    tmp['mchirp'] = [pnutils.mass1_mass2_to_mchirp_eta(mass1, mass2)[0] for mass1,mass2 in zip(tmp['mass1'],tmp['mass2'])]
-    tmp['eta'] = [pnutils.mass1_mass2_to_mchirp_eta(mass1, mass2)[1] for mass1,mass2 in zip(tmp['mass1'],tmp['mass2'])]
-
-    # construct an array for spin quantities
-    # FIXME: only spin-z were in test files, need to add case where they don't exist
-    tmp['spin1z'] = data_tmpltbank['spin1z'][:][template_id]
-    tmp['spin2z'] = data_tmpltbank['spin2z'][:][template_id]
-
-    # construct an array for tau quantities
-    # FIXME: can use pnuutils.mass1_mass2_to_tau0_tau3 but need f_low; are these tau quantities used?
-
-    # construct an array for effective distance 
-    tmp['eff_distance'] = tmp['sigmasq']**(0.5) / abs(tmp['snr'])
-
-    # insert rows into sngl_inspiral table
-    logging.info('Populating sngl_inspiral table...')
-    sqlite_insert_into_table(dbtables.lsctables.SnglInspiralTable, tmp)
-
-# remove intermediate arrays
-del end_time
-
-###############################################################################
-# time_slide
-###############################################################################
+sngl_inspiral = sqlite_create_table(dbtables.lsctables.SnglInspiralTable)
 
 # create time_slide table in database and a dict with column names as key
 logging.info('Creating time_slide table...')
-tmp = sqlite_create_table(dbtables.lsctables.TimeSlideTable)
+time_slide = sqlite_create_table(dbtables.lsctables.TimeSlideTable)
 
-# construct an array for the IFO
-num_bkg_trigs = data_coinc['background']['trigger_id1'].len()
-tmp['instrument'] = np.array([','.join([ifo1, ifo2]) for i in range(num_bkg_trigs)]) 
+# create experiment_map table in database and a dict with column names as key
+logging.info('Creating experiment_map table...')
+experiment_map = sqlite_create_table(dbtables.lsctables.ExperimentMapTable)
 
-# construct an array for the offset of the time slide
-tmp['offset'] = data_coinc['background']['timeslide_id'][:]
+# create coinc_event table in database and a dict with column names as key
+logging.info('Creating experiment_summary table...')
+experiment_summary = sqlite_create_table(dbtables.lsctables.ExperimentSummaryTable)
 
-# construct an array for the time slide ID
-tmp['time_slide_id'] = np.array(['time_slide:time_slide_id:'+str(timeslide) for timeslide in data_coinc['background']['timeslide_id'][:]])
+# loop to add both foreground and background
+for dataset in dataset_list:
 
-# insert rows into time_slide table
-logging.info('Populating time_slide table...')
-sqlite_insert_into_table(dbtables.lsctables.TimeSlideTable, tmp)
+    ###############################################################################
+    # coinc_event_map
+    ###############################################################################
+
+    # print
+    logging.info('Constructing arrays for %s rows in the coinc_event_map table...'%dataset)
+
+    # get number of coincident triggers and IFO single inspiral trigger IDs
+    num_coinc_trigs = data_coinc[dataset]['trigger_id1'].len()
+    trigger_id1 = data_coinc[dataset]['trigger_id1'][:]
+    trigger_id2 = data_coinc[dataset]['trigger_id2'][:]
+    template_id = data_coinc[dataset]['template_id'][:]
+
+    # construct an array for event_id
+    event_id1 = ['sngl_inspiral:event_id:'+dataset+':'+ifo1+':'+str(trigger_id1[i]) for i in range(num_coinc_trigs)]
+    event_id2 = ['sngl_inspiral:event_id:'+dataset+':'+ifo2+':'+str(trigger_id2[i]) for i in range(num_coinc_trigs)]
+    coinc_event_map['event_id']  = np.array(event_id1 + event_id2)
+
+    # construct an array for table_name and coinc_event_id
+    coinc_event_map['table_name']     = np.array(['sngl_inspiral' for i in range(num_coinc_trigs)])
+    coinc_event_map['coinc_event_id'] = np.array(['coinc_event:coinc_event_id:'+dataset+':'+str(i) for i in range(num_coinc_trigs)])
+
+    # insert rows into coinc_event_map table
+    logging.info('Populating %s rows in the coinc_event_map table...'%dataset)
+    sqlite_insert_into_table(dbtables.lsctables.CoincMapTable, coinc_event_map)
+
+    # make lists of IFO-dependent data to index
+    # FIXME: this needs to be more robust for n detectors
+    ifo_list = [ifo1, ifo2]
+    trigger_id_list = [trigger_id1, trigger_id2]
+    event_id_list = [event_id1, event_id2]
+
+    ###############################################################################
+    # coinc_event
+    ###############################################################################
+
+    # print
+    logging.info('Constructing arrays for %s rows in the coinc_event_map table...'%dataset)
+
+    # construct an array for instruments
+    coinc_event['instruments'] = np.array([','.join([ifo1, ifo2]) for i in range(num_coinc_trigs)])
+
+    # construct an array for nevents
+    coinc_event['nevents'] = np.array([2 for i in range(num_coinc_trigs)])
+
+    # construct an array for process_id
+    # FIXME: add this; is this used even?
+
+    # construct an array for coinc_def_id
+    # FIXME: add this
+
+    # construct an array for time_slide_id
+    if dataset == 'background':
+        coinc_event['time_slide_id'] = np.array(['time_slide:time_slide_id:'+str(timeslide) for timeslide in data_coinc[dataset]['timeslide_id'][:]])
+    else:
+        coinc_event['time_slide_id'] = np.array(['time_slide:time_slide_id:0' for i in range(num_coinc_trigs)])
+
+    # insert rows into coinc_map table
+    logging.info('Populating %s rows in the coinc_event table...'%dataset)
+    sqlite_insert_into_table(dbtables.lsctables.CoincTable, coinc_event)
+
+    ###############################################################################
+    # coinc_inspiral
+    ###############################################################################
+
+    # read HDF5 tmpltbank file
+    data_tmpltbank = h5py.File(filename_tmpltbank, 'r')
+
+    # construct an array for coinc_event_id and ifos
+    coinc_inspiral['coinc_event_id'] = coinc_event_map['event_id']
+    coinc_inspiral['ifos'] = coinc_event['instruments']
+
+    # construct an array for false_alarm_rate
+    coinc_inspiral['false_alarm_rate'] = np.array([1./ifar for ifar in data_coinc[dataset]['ifar'][:]])
+
+    # construct an array for minimum_duration
+    # FIXME: add this; is this used?
+
+    # construct an array for mass and mchirp
+    template_id = data_coinc[dataset]['template_id'][:]
+    mass1 = data_tmpltbank['mass1'][:][template_id]
+    mass2 = data_tmpltbank['mass2'][:][template_id]
+    coinc_inspiral['mass'] = mass1 + mass2
+    coinc_inspiral['mchirp'] = [pnutils.mass1_mass2_to_mchirp_eta(mass1, mass2)[0] for mass1,mass2 in zip(mass1,mass2)]
+
+    # construct an array for end_time and end_time_ns
+    # FIXME: add this
+
+    # construct an array for combined_far
+    # FIXME: add this
+
+    # insert rows into coinc_inspiral table
+    logging.info('Populating %s rows in the coinc_inspiral table...'%dataset)
+    sqlite_insert_into_table(dbtables.lsctables.CoincInspiralTable, coinc_inspiral)
+
+    ###############################################################################
+    # sngl_inspiral
+    ###############################################################################
+
+    # loop over IFO IDs
+    for i in range(len(ifo_list)):
+
+        # read HDF5 tmpltbank file
+        data_sngl = h5py.File(filenames_sngl[i], 'r')
+
+        # get IFO-dependent data
+        ifo = ifo_list[i]
+        trigger_id = trigger_id_list[i]
+
+        # construct an array for event_id
+        sngl_inspiral['event_id']  = event_id_list[i]
+
+        # construct an array for ifo
+        sngl_inspiral['ifo'] = np.array([ifo for j in range(num_coinc_trigs)])
+
+        # construct an array for end_time and end_time_ns
+        end_time = data_sngl[ifo]['end_time'][:][trigger_id]
+        sngl_inspiral['end_time'] = np.array([int(time) for time in end_time])
+        sngl_inspiral['end_time_ns'] = np.array([int(time % 1 * 1e9) for time in end_time])
+
+        # construct an array for chi-squared values and their degrees of freedom
+        sngl_inspiral['cont_chisq'] = data_sngl[ifo]['cont_chisq'][:][trigger_id]
+        sngl_inspiral['cont_chisq_dof'] = map(int, data_sngl[ifo]['cont_chisq_dof'][:][trigger_id])
+        sngl_inspiral['bank_chisq'] = data_sngl[ifo]['bank_chisq'][:][trigger_id]
+        sngl_inspiral['bank_chisq_dof'] = map(int, data_sngl[ifo]['bank_chisq_dof'][:][trigger_id])
+        sngl_inspiral['chisq'] = data_sngl[ifo]['chisq_dof'][:][trigger_id]
+        sngl_inspiral['chisq_dof'] = map(int, data_sngl[ifo]['chisq_dof'][:][trigger_id])
+
+        # construct an array for snr
+        sngl_inspiral['snr'] = data_sngl[ifo]['snr'][:][trigger_id]
+
+        # construct an array for coa_phase
+        sngl_inspiral['coa_phase'] = data_sngl[ifo]['coa_phase'][:][trigger_id]
+
+        # construct an array for sigmasq
+        sngl_inspiral['sigmasq'] = data_sngl[ifo]['sigmasq'][:][trigger_id]
+
+        # construct an array for mass quantities
+        template_id = data_sngl[ifo]['template_id'][:][trigger_id]
+        sngl_inspiral['mass1'] = data_tmpltbank['mass1'][:][template_id]
+        sngl_inspiral['mass2'] = data_tmpltbank['mass2'][:][template_id]
+        sngl_inspiral['mtotal'] = sngl_inspiral['mass1'] + sngl_inspiral['mass2']
+        sngl_inspiral['mchirp'] = [pnutils.mass1_mass2_to_mchirp_eta(mass1, mass2)[0] for mass1,mass2 in zip(sngl_inspiral['mass1'],sngl_inspiral['mass2'])]
+        sngl_inspiral['eta'] = [pnutils.mass1_mass2_to_mchirp_eta(mass1, mass2)[1] for mass1,mass2 in zip(sngl_inspiral['mass1'],sngl_inspiral['mass2'])]
+
+        # construct an array for spin quantities
+        # FIXME: only spin-z were in test files, need to add case where they don't exist
+        sngl_inspiral['spin1z'] = data_tmpltbank['spin1z'][:][template_id]
+        sngl_inspiral['spin2z'] = data_tmpltbank['spin2z'][:][template_id]
+
+        # construct an array for tau quantities
+        # FIXME: can use pnuutils.mass1_mass2_to_tau0_tau3 but need f_low; are these tau quantities used?
+
+        # construct an array for effective distance 
+        sngl_inspiral['eff_distance'] = sngl_inspiral['sigmasq']**(0.5) / abs(sngl_inspiral['snr'])
+
+        # insert rows into sngl_inspiral table
+        logging.info('Populating sngl_inspiral table...')
+        sqlite_insert_into_table(dbtables.lsctables.SnglInspiralTable, sngl_inspiral)
+
+    # remove intermediate arrays no longer needed
+    del end_time
+
+    ###############################################################################
+    # time_slide
+    ###############################################################################
+
+    # print
+    logging.info('Constructing arrays for %s rows in the time_slide table...'%dataset)
+
+    # construct an array for the IFO
+    time_slide['instrument'] = np.array([','.join([ifo1, ifo2]) for j in range(num_coinc_trigs)])
+
+    # construct an array for the offset of the time slide
+    if dataset == 'background':
+        time_slide['offset'] = data_coinc[dataset]['timeslide_id'][:]
+    else:
+        time_slide['offset'] = np.array([0 for j in range(num_coinc_trigs)])
+
+    # construct an array for the time slide ID
+    time_slide['time_slide_id'] = coinc_event['time_slide_id']
+
+    # insert rows into time_slide table
+    logging.info('Populating time_slide table...')
+    sqlite_insert_into_table(dbtables.lsctables.TimeSlideTable, time_slide)
+
+    ###############################################################################
+    # experiment_map
+    ###############################################################################
+
+    # construct an array for experiment_summ_id
+    if dataset == 'background':
+        experiment_map['experiment_summ_id'] = np.array(['experiment_summary:experiment_summ_id:'+str(timeslide) for timeslide in data_coinc[dataset]['timeslide_id'][:]])
+    else:
+        experiment_map['experiment_summ_id'] = np.array(['time_slide:time_slide_id:0' for i in range(num_coinc_trigs)])
+
+    # construct an array for the coinc_event_id
+    experiment_map['coinc_event_id'] = coinc_event_map['event_id'] 
+
+    # insert rows into experiment table
+    logging.info('Populating experiment_summary table...')
+    sqlite_insert_into_table(dbtables.lsctables.ExperimentMapTable, experiment_map)
+
+    ###############################################################################
+    # experiment_summary
+    ###############################################################################
+
+    # construct an array for the experiment_summ_id
+    experiment_summary['experiment_summ_id'] = experiment_map['experiment_summ_id']
+
+    # construct an array for the duration of the experiment
+    # FIXME: add this
+
+    # construct an array for the time slide ID
+    experiment_summary['time_slide_id']  = time_slide['time_slide_id']
+
+    # construct an array for the experiment datatype
+    # all_data : a zero-lag experiment
+    # slide    : a time slide experiment
+    if dataset == 'background':
+        experiment_summary['datatype'] = np.array(['slide' for i in range(len(time_slide['time_slide_id']))])
+    else:
+        experiment_summary['datatype']  = ['all_data']
+
+    # insert rows into experiment table
+    logging.info('Populating experiment_summary table...')
+    sqlite_insert_into_table(dbtables.lsctables.ExperimentSummaryTable, experiment_summary)
 
 ###############################################################################
 # experiment
@@ -355,47 +418,13 @@ tmp['experiment_id'] = ['experiment:experiment_id:0']
 tmp['instruments'] = [','.join(ifo_list)]
 
 # construct an array for the start and end time of the experiment
-# FIXME: are these the correct times?
-tmp['gps_start_time'] = [0]
-tmp['gps_end_time'] = [0]
+# FIXME: add this
 
 # insert rows into experiment table
 logging.info('Populating experiment table...')
 sqlite_insert_into_table(dbtables.lsctables.ExperimentTable, tmp)
 
-###############################################################################
-# experiment_summary
-###############################################################################
-
-# create coinc_event table in database and a dict with column names as key
-logging.info('Creating experiment_summary table...')
-tmp = sqlite_create_table(dbtables.lsctables.ExperimentSummaryTable)
-
-# construct an array for the experiment_summ_id
-num_slides = data_coinc.attrs['num_slides']
-tmp['experiment_summ_id'] = np.array(['experiment_summary:experiment_summ_id:'+str(i) for i in range(num_slides+1)])
-
-# construct an array for the duration of the experiment
-# FIXME: add this
-
-# construct an array for the time slide ID
-rows = cur.execute('SELECT DISTINCT time_slide_id FROM time_slide').fetchall()
-tmp['time_slide_id']  = ['time_slide:time_slide_id:0']
-tmp['time_slide_id'] += [row['time_slide_id'] for row in rows]
-tmp['time_slide_id']  = np.array(tmp['time_slide_id'])
-
-# construct an array for the experiment datatype
-# all_data : a zero-lag experiment
-# slide    : a time slide experiment
-tmp['datatype']  = ['all_data']
-tmp['datatype'] += ['slide' for i in range(num_slides)]
-tmp['datatype']  = np.array(tmp['datatype'])
-
-# insert rows into experiment table
-logging.info('Populating experiment_summary table...')
-sqlite_insert_into_table(dbtables.lsctables.ExperimentSummaryTable, tmp)
-
-# sav edatabasi and exit
+# save database and exit
 logging.info('Done.')
 con.commit()
 con.close()
