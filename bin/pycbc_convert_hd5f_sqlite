@@ -308,11 +308,36 @@ for i in range(len(ifo_list)):
     # FIXME: can use pnuutils.mass1_mass2_to_tau0_tau3 but need f_low; are these tau quantities used?
 
     # construct an array for effective distance 
-    tmp['eff_distance'] = tmp['sigmasq']**(0.5) / abs(tmp['snr']
+    tmp['eff_distance'] = tmp['sigmasq']**(0.5) / abs(tmp['snr'])
 
     # insert rows into sngl_inspiral table
     logging.info('Populating sngl_inspiral table...')
     sqlite_insert_into_table(dbtables.lsctables.SnglInspiralTable, tmp)
+
+# remove intermediate arrays
+del end_time
+
+###############################################################################
+# time_slide
+###############################################################################
+
+# create time_slide table in database and a dict with column names as key
+logging.info('Creating time_slide table...')
+tmp = sqlite_create_table(dbtables.lsctables.TimeSlideTable)
+
+# construct an array for the IFO
+num_bkg_trigs = data_coinc['background']['trigger_id1'].len()
+tmp['instrument'] = np.array([','.join([ifo1, ifo2]) for i in range(num_bkg_trigs)]) 
+
+# construct an array for the offset of the time slide
+tmp['offset'] = data_coinc['background']['timeslide_id'][:]
+
+# construct an array for the time slide ID
+tmp['time_slide_id'] = np.array(['time_slide:time_slide_id:'+str(timeslide) for timeslide in data_coinc['background']['timeslide_id'][:]])
+
+# insert rows into time_slide table
+logging.info('Populating time_slide table...')
+sqlite_insert_into_table(dbtables.lsctables.TimeSlideTable, tmp)
 
 ###############################################################################
 # experiment
@@ -331,16 +356,46 @@ tmp['instruments'] = [','.join(ifo_list)]
 
 # construct an array for the start and end time of the experiment
 # FIXME: are these the correct times?
-tmp['gps_start_time'] = [min(data_coinc['foreground']['analyzed_start'][:])]
-tmp['gps_end_time'] = [max(data_coinc['foreground']['analyzed_start'][:])]
+tmp['gps_start_time'] = [0]
+tmp['gps_end_time'] = [0]
 
 # insert rows into experiment table
 logging.info('Populating experiment table...')
 sqlite_insert_into_table(dbtables.lsctables.ExperimentTable, tmp)
 
+###############################################################################
+# experiment_summary
+###############################################################################
 
+# create coinc_event table in database and a dict with column names as key
+logging.info('Creating experiment_summary table...')
+tmp = sqlite_create_table(dbtables.lsctables.ExperimentSummaryTable)
 
-# save database and exit
+# construct an array for the experiment_summ_id
+num_slides = data_coinc.attrs['num_slides']
+tmp['experiment_summ_id'] = np.array(['experiment_summary:experiment_summ_id:'+str(i) for i in range(num_slides+1)])
+
+# construct an array for the duration of the experiment
+# FIXME: add this
+
+# construct an array for the time slide ID
+rows = cur.execute('SELECT DISTINCT time_slide_id FROM time_slide').fetchall()
+tmp['time_slide_id']  = ['time_slide:time_slide_id:0']
+tmp['time_slide_id'] += [row['time_slide_id'] for row in rows]
+tmp['time_slide_id']  = np.array(tmp['time_slide_id'])
+
+# construct an array for the experiment datatype
+# all_data : a zero-lag experiment
+# slide    : a time slide experiment
+tmp['datatype']  = ['all_data']
+tmp['datatype'] += ['slide' for i in range(num_slides)]
+tmp['datatype']  = np.array(tmp['datatype'])
+
+# insert rows into experiment table
+logging.info('Populating experiment_summary table...')
+sqlite_insert_into_table(dbtables.lsctables.ExperimentSummaryTable, tmp)
+
+# sav edatabasi and exit
 logging.info('Done.')
 con.commit()
 con.close()
