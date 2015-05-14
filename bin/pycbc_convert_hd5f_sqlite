@@ -19,6 +19,7 @@
 import argparse
 import h5py
 import logging
+import numpy as np
 import sqlite3
 import sys
 
@@ -48,7 +49,7 @@ def sqlite_create_table(table):
     # the column name and the second element is the column type
     columns = []
     for col_name,col_type in validcolumns.iteritems():
-        if col_type is 'int_4s':
+        if col_type in ['int_4s', 'int_4u']:
             col_type = 'INTEGER'
         elif col_type in ['real_4', 'real_8']:
             col_type = 'REAL'
@@ -102,7 +103,7 @@ data.close()
 # key a dict on the column names
 tmp = {}
 for key in dbtables.lsctables.CoincMapTable.validcolumns.keys():
-    tmp[key] = [None for i in range(num_coinc_trigs)]
+    tmp[key] = np.array(['' for i in range(num_coinc_trigs)])
 
 # create coinc_event_map table
 logging.info('Creating coinc_event_map table...')
@@ -112,10 +113,11 @@ cur.execute(sqlquery)
 # construct an array for event_id
 tmp['event_id']  = ['sngl_inspiral:event_id:'+ifo1+str(trigger_ids_1[i]) for i in range(num_coinc_trigs)]
 tmp['event_id'] += ['sngl_inspiral:event_id:'+ifo2+str(trigger_ids_2[i]) for i in range(num_coinc_trigs)]
+tmp['event_id']  = np.array(tmp['event_id'])
 
 # construct an array for table_name and coinc_event_id
-tmp['table_name']     = ['sngl_inspiral' for i in range(num_coinc_trigs)]
-tmp['coinc_event_id'] = ['coinc_event:coinc_event_id:'+str(i) for i in range(num_coinc_trigs)]
+tmp['table_name']     = np.array(['sngl_inspiral' for i in range(num_coinc_trigs)])
+tmp['coinc_event_id'] = np.array(['coinc_event:coinc_event_id:'+str(i) for i in range(num_coinc_trigs)])
 
 # put column names and column arrays into seperate lists
 # that will be used to construct the SQLite command
@@ -125,12 +127,30 @@ for key,val in tmp.iteritems():
     column_names.append(key)
     column_values.append(val)
 
-# insert into coinc_map_table triggers
+# insert rows into coinc_map_table
 logging.info('Populating coinc_event_map table...')
 sqlquery = """
 INSERT INTO coinc_event_map(%s) VALUES (?, ?, ?);
 """%', '.join(column_names)
 cur.executemany(sqlquery, zip(*column_values))
+
+###############################################################################
+# coinc_event
+###############################################################################
+
+# create coinc_event table
+logging.info('Creating coinc_event table...')
+sqlquery = sqlite_create_table(dbtables.lsctables.CoincTable)
+cur.execute(sqlquery)
+
+###############################################################################
+# coinc_inspiral
+###############################################################################
+
+# create coinc_inspiral table
+logging.info('Creating coinc_inspiral table...')
+sqlquery = sqlite_create_table(dbtables.lsctables.CoincInspiralTable)
+cur.execute(sqlquery)
 
 ###############################################################################
 # sngl_inspiral
@@ -141,10 +161,9 @@ logging.info('Creating sngl_inspiral table...')
 sqlquery = sqlite_create_table(dbtables.lsctables.SnglInspiralTable)
 cur.execute(sqlquery)
 
-# read HDF5 coincidence file
+# read HDF5 single inspiral trigger file
 data = h5py.File(filenames_sngl[0], 'r')
 
-# get cont_chisq
 
 
 #cont_chisq REAL, bank_chisq REAL, chisq_dof INTEGER, end_time_gmst REAL, event_duration REAL, chisq REAL, spin1y REAL, spin1x REAL, alpha REAL, coa_phase REAL, alpha2 REAL, mchirp REAL, alpha1 REAL, alpha6 REAL, alpha4 REAL, alpha5 REAL, event_id TEXT, chi REAL, cont_chisq_dof INTEGER, spin2y REAL, tau2 REAL, tau3 REAL, tau0 REAL, tau4 REAL, tau5 REAL, template_duration REAL, impulse_time INTEGER, impulse_time_ns INTEGER, rsqveto_duration REAL, channel TEXT, mtotal REAL, alpha3 REAL, spin1z REAL, Gamma5 REAL, spin2x REAL, f_final REAL, beta REAL, process_id TEXT, snr REAL, bank_chisq_dof INTEGER, kappa REAL, eff_distance REAL, Gamma7 REAL, Gamma6 REAL, search TEXT, Gamma4 REAL, mass1 REAL, Gamma2 REAL, Gamma1 REAL, mass2 REAL, ttotal REAL, Gamma0 REAL, spin2z REAL, Gamma9 REAL, Gamma8 REAL, Gamma3 REAL, eta REAL, psi0 REAL, end_time INTEGER, amplitude REAL, psi3 REAL, end_time_ns INTEGER, ifo TEXT, sigmasq REAL
