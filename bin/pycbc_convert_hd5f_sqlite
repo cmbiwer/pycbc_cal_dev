@@ -160,7 +160,7 @@ tmp['event_id']  = np.array(tmp['event_id'])
 tmp['table_name']     = np.array(['sngl_inspiral' for i in range(num_coinc_trigs)])
 tmp['coinc_event_id'] = np.array(['coinc_event:coinc_event_id:'+str(i) for i in range(num_coinc_trigs)])
 
-# insert rows into coinc_map_table
+# insert rows into coinc_event_map table
 logging.info('Populating coinc_event_map table...')
 sqlite_insert_into_table(dbtables.lsctables.CoincMapTable, tmp)
 
@@ -194,7 +194,7 @@ tmp['nevents'] = np.array([2 for i in range(num_coinc_trigs)])
 # construct an array likelihood
 # likelihood doesn't appear to be populated in old databases
 
-# insert rows into coinc_map_table
+# insert rows into coinc_map table
 logging.info('Populating coinc_event table...')
 sqlite_insert_into_table(dbtables.lsctables.CoincTable, tmp)
 
@@ -218,7 +218,7 @@ tmp['ifos'] = np.array([row['instruments'] for row in rows])
 tmp['false_alarm_rate'] = np.array([1./ifar for ifar in data_coinc['foreground']['ifar'][:]])
 
 # construct an array for minimum_duration
-# FIXME: add this
+# FIXME: add this; is this used?
 
 # construct an array for mass and mchirp
 template_id = data_coinc['foreground']['template_id'][:]
@@ -233,7 +233,7 @@ tmp['mchirp'] = [pnutils.mass1_mass2_to_mchirp_eta(mass1, mass2)[0] for mass1,ma
 # construct an array for combined_far
 # FIXME: add this
 
-# insert rows into coinc_map_table
+# insert rows into coinc_inspiral table
 logging.info('Populating coinc_inspiral table...')
 sqlite_insert_into_table(dbtables.lsctables.CoincInspiralTable, tmp)
 
@@ -247,12 +247,13 @@ tmp1 = sqlite_create_table(dbtables.lsctables.SnglInspiralTable)
 tmp2 = tmp1
 
 # make lists of IFO-dependent data to index
+# FIXME: this needs to be more robust for n detectors
 ifo_list = [ifo1, ifo2]
 trigger_id_list = [trigger_ids_1, trigger_ids_2]
 tmp_list = [tmp1, tmp2]
 
 # loop over IFO IDs
-for i in range(2):
+for i in range(len(ifo_list)):
 
     # read HDF5 tmpltbank file
     data_sngl = h5py.File(filenames_sngl[i], 'r')
@@ -309,9 +310,35 @@ for i in range(2):
     # construct an array for effective distance 
     tmp['eff_distance'] = tmp['sigmasq']**(0.5) / abs(tmp['snr']
 
-    # insert rows into coinc_map_table
+    # insert rows into sngl_inspiral table
     logging.info('Populating sngl_inspiral table...')
     sqlite_insert_into_table(dbtables.lsctables.SnglInspiralTable, tmp)
+
+###############################################################################
+# experiment
+###############################################################################
+
+# create coinc_event table in database and a dict with column names as key
+logging.info('Creating experiment table...')
+tmp = sqlite_create_table(dbtables.lsctables.ExperimentTable)
+
+# construct an array experiment ID, each experiment is an IFO combination
+# FIXME: this entire section assumes only a 2-detector analysis
+tmp['experiment_id'] = ['experiment:experiment_id:0']
+
+# construct an array for the IFOs in the experiment
+tmp['instruments'] = [','.join(ifo_list)]
+
+# construct an array for the start and end time of the experiment
+# FIXME: are these the correct times?
+tmp['gps_start_time'] = [min(data_coinc['foreground']['analyzed_start'][:])]
+tmp['gps_end_time'] = [max(data_coinc['foreground']['analyzed_start'][:])]
+
+# insert rows into experiment table
+logging.info('Populating experiment table...')
+sqlite_insert_into_table(dbtables.lsctables.ExperimentTable, tmp)
+
+
 
 # save database and exit
 logging.info('Done.')
