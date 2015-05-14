@@ -37,8 +37,7 @@ filenames_vetoes  = ['']
 
 def sqlite_create_table(table):
     """
-    Returns a string with the SQLite command to create
-    the LIGOLW table in the database.
+    Creates a LIGOLW table in the database.
     """
 
     # get table name and columns
@@ -60,12 +59,63 @@ def sqlite_create_table(table):
             sys.exit()
         columns.append( (col_name, col_type) )
 
-    # construct the SQLite query string
+    # create table
     sqlquery = """
     CREATE TABLE %s(%s);
     """%(table_name, ', '.join([col_name+' '+col_type for col_name,col_type in columns]))
+    cur.execute(sqlquery)
 
-    return sqlquery
+def sqlite_insert_into_table(table, tmp):
+    """
+    Adds rows into a LIGOLW table in the database.
+    """
+
+    # get table name
+    table_name = table.tableName.replace(':table', '')
+
+    # read dict and make a tuple of key values and a tuple of
+    # values where the ith key corresponds to the ith value
+    column_names, column_values = make_table_tuples(tmp)
+
+    # add rows into table
+    sqlquery = """
+    INSERT INTO %s(%s) VALUES (%s);
+    """%( table_name, ', '.join(column_names), ', '.join(['?'] * len(column_names)) )
+    cur.executemany(sqlquery, zip(*column_values))
+
+def make_table_dict(table, length):
+    """
+    Creates a dict where the keys are the column names and the values
+    are empty numpy arrays.
+    """
+
+    # key a dict on the column names
+    tmp = {}
+    for key in table.validcolumns.keys():
+        tmp[key] = None
+
+    return tmp
+
+def make_table_tuples(tmp):
+    """
+    Creates two lists. The first list returned is a list of the
+    column names for the table. The second list is a list of
+    iterables (eg. numpy arrays) for the column names.
+
+    This is done to preserved order, the ith column name should use
+    the ith column value.
+    """
+
+    # put column names and column arrays into seperate lists
+    # that will be used to construct the SQLite command
+    column_names  = []
+    column_values = []
+    for key,val in tmp.iteritems():
+        if val is not None:
+            column_names.append(key)
+            column_values.append(val)
+
+    return column_names, column_values
 
 # parse command line
 parser = argparse.ArgumentParser(usage='pycbc_convert_hdf5_sqlite [--options]',
@@ -82,6 +132,11 @@ logging.basicConfig(format='%(asctime)s : %(message)s', level=logging_level)
 logging.info('Creating database...')
 con = sqlite3.connect(filename_db)
 cur = con.cursor()
+
+# tell sqlite3 about numpy int datatypes
+for t in (np.int8, np.int16, np.int32, np.int64, np.uint8,
+          np.uint16, np.uint32, np.uint64):
+   sqlite3.register_adapter(t, long)
 
 ###############################################################################
 # coinc_event_map
@@ -100,15 +155,12 @@ trigger_ids_1 = data['foreground']['trigger_id1'][:]
 trigger_ids_2 = data['foreground']['trigger_id2'][:]
 data.close()
 
-# key a dict on the column names
-tmp = {}
-for key in dbtables.lsctables.CoincMapTable.validcolumns.keys():
-    tmp[key] = np.array(['' for i in range(num_coinc_trigs)])
-
 # create coinc_event_map table
 logging.info('Creating coinc_event_map table...')
-sqlquery = sqlite_create_table(dbtables.lsctables.CoincMapTable)
-cur.execute(sqlquery)
+sqlite_create_table(dbtables.lsctables.CoincMapTable)
+
+# key a dict on the column names of the table
+tmp = make_table_dict(dbtables.lsctables.CoincMapTable, num_coinc_trigs)
 
 # construct an array for event_id
 tmp['event_id']  = ['sngl_inspiral:event_id:'+ifo1+str(trigger_ids_1[i]) for i in range(num_coinc_trigs)]
@@ -117,22 +169,12 @@ tmp['event_id']  = np.array(tmp['event_id'])
 
 # construct an array for table_name and coinc_event_id
 tmp['table_name']     = np.array(['sngl_inspiral' for i in range(num_coinc_trigs)])
-tmp['coinc_event_id'] = np.array(['coinc_event:coinc_event_id:'+str(i) for i in range(num_coinc_trigs)])
-
-# put column names and column arrays into seperate lists
-# that will be used to construct the SQLite command
-column_names  = []
-column_values = []
-for key,val in tmp.iteritems():
-    column_names.append(key)
-    column_values.append(val)
+coinc_event_id        = np.array(['coinc_event:coinc_event_id:'+str(i) for i in range(num_coinc_trigs)])
+tmp['coinc_event_id'] = coinc_event_id
 
 # insert rows into coinc_map_table
 logging.info('Populating coinc_event_map table...')
-sqlquery = """
-INSERT INTO coinc_event_map(%s) VALUES (?, ?, ?);
-"""%', '.join(column_names)
-cur.executemany(sqlquery, zip(*column_values))
+sqlite_insert_into_table(dbtables.lsctables.CoincMapTable, tmp)
 
 ###############################################################################
 # coinc_event
@@ -140,31 +182,43 @@ cur.executemany(sqlquery, zip(*column_values))
 
 # create coinc_event table
 logging.info('Creating coinc_event table...')
-sqlquery = sqlite_create_table(dbtables.lsctables.CoincTable)
-cur.execute(sqlquery)
+sqlite_create_table(dbtables.lsctables.CoincTable)
+
+# key a dict on the column names of the table
+tmp = make_table_dict(dbtables.lsctables.CoincTable, num_coinc_trigs)
+
+# construct an array for coinc_event_id
+tmp['coinc_event_id'] = coinc_event_id
+
+# construct an array for instruments
+tmp['instruments'] = np.array([','.join([ifo1, ifo2]) for i in range(num_coinc_trigs)])
+
+# construct an array for nevents
+tmp['nevents'] = np.array([2 for i in range(num_coinc_trigs)], dtype=np.integer)
+
+# construct an array for process_id
+# FIXME: add this, is this used even?
+
+# construct an array for coinc_def_id
+# FIXME: add this
+
+# construct an array for time_slide_id
+# FIXME: add this
+
+# construct an array likelihood
+# likelihood doesn't appear to be populated in old databases
+
+# insert rows into coinc_map_table
+logging.info('Populating coinc_event table...')
+sqlite_insert_into_table(dbtables.lsctables.CoincTable, tmp)
 
 ###############################################################################
 # coinc_inspiral
 ###############################################################################
 
-# create coinc_inspiral table
-logging.info('Creating coinc_inspiral table...')
-sqlquery = sqlite_create_table(dbtables.lsctables.CoincInspiralTable)
-cur.execute(sqlquery)
-
 ###############################################################################
 # sngl_inspiral
 ###############################################################################
-
-# create sngl_inspiral table
-logging.info('Creating sngl_inspiral table...')
-sqlquery = sqlite_create_table(dbtables.lsctables.SnglInspiralTable)
-cur.execute(sqlquery)
-
-# read HDF5 single inspiral trigger file
-data = h5py.File(filenames_sngl[0], 'r')
-
-
 
 #cont_chisq REAL, bank_chisq REAL, chisq_dof INTEGER, end_time_gmst REAL, event_duration REAL, chisq REAL, spin1y REAL, spin1x REAL, alpha REAL, coa_phase REAL, alpha2 REAL, mchirp REAL, alpha1 REAL, alpha6 REAL, alpha4 REAL, alpha5 REAL, event_id TEXT, chi REAL, cont_chisq_dof INTEGER, spin2y REAL, tau2 REAL, tau3 REAL, tau0 REAL, tau4 REAL, tau5 REAL, template_duration REAL, impulse_time INTEGER, impulse_time_ns INTEGER, rsqveto_duration REAL, channel TEXT, mtotal REAL, alpha3 REAL, spin1z REAL, Gamma5 REAL, spin2x REAL, f_final REAL, beta REAL, process_id TEXT, snr REAL, bank_chisq_dof INTEGER, kappa REAL, eff_distance REAL, Gamma7 REAL, Gamma6 REAL, search TEXT, Gamma4 REAL, mass1 REAL, Gamma2 REAL, Gamma1 REAL, mass2 REAL, ttotal REAL, Gamma0 REAL, spin2z REAL, Gamma9 REAL, Gamma8 REAL, Gamma3 REAL, eta REAL, psi0 REAL, end_time INTEGER, amplitude REAL, psi3 REAL, end_time_ns INTEGER, ifo TEXT, sigmasq REAL
 
