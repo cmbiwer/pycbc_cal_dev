@@ -1,6 +1,6 @@
 #! /usr/bin/python
 
-# Copyright (C) 2014 Christopher M. Biwer
+# Copyright (C) 2015 Christopher M. Biwer
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by the
@@ -32,7 +32,7 @@ filename_tmpltbank = '/home/ahnitz/projects/BNS/snrthreshold/mdc/ns/SNR_6.0/bank
 filenames_sngl = ['/home/ahnitz/projects/BNS/snrthreshold/mdc/ns/SNR_6.0/full_data/H1-HDF_TRIGGER_MERGE_FULL_DATA-966384015-1000000.hdf',
                   '/home/ahnitz/projects/BNS/snrthreshold/mdc/ns/SNR_6.0/full_data/L1-HDF_TRIGGER_MERGE_FULL_DATA-966384015-1000000.hdf']
 filename_coinc = '/home/cbiwer/src/H1L1-STATMAP_FULL_DATA_FULL_12H_SMALL-966384015-1000000.hdf'
-filenames_inj = ['']
+filename_inj = '/home/ahnitz/projects/BNS/snrthreshold/mdc/ns/SNR_5.5/BNSALIGNED0INJ_coinc/H1L1-HDFINJFIND_BNSALIGNED0INJ_INJ_INJ-966384015-1000000.hdf'
 filenames_segments = ''
 filenames_vetoes  = ['']
 
@@ -424,7 +424,7 @@ logging.info('Creating experiment table...')
 tmp = sqlite_create_table(dbtables.lsctables.ExperimentTable)
 
 # print
-logging.info('Constructing arrays for %s rows in the experiment table...'%dataset)
+logging.info('Constructing arrays for rows in the experiment table...')
 
 # construct an array experiment ID, each experiment is an IFO combination
 # FIXME: this entire section assumes only a 2-detector analysis
@@ -434,11 +434,64 @@ tmp['experiment_id'] = ['experiment:experiment_id:0']
 tmp['instruments'] = [','.join(ifo_list)]
 
 # construct an array for the start and end time of the experiment
-# FIXME: add this
+tmp['gps_start_time'] = [min(data_coinc['foreground']['analyzed_start'][:])]
+tmp['gps_end_time'] = [max(data_coinc['foreground']['analyzed_end'][:])]
 
 # insert rows into experiment table
 logging.info('Populating experiment table...')
 sqlite_insert_into_table(dbtables.lsctables.ExperimentTable, tmp)
+
+###############################################################################
+# sim_inspiral
+###############################################################################
+
+# create coinc_event table in database and a dict with column names as key
+logging.info('Creating sim_inspiral table...')
+sim_inspiral = sqlite_create_table(dbtables.lsctables.SimInspiralTable)
+
+# read HDF5 injection file
+data_inj = h5py.File(filename_inj, 'r')
+
+# print
+logging.info('Constructing arrays for rows in the sim_inspiral table...')
+
+# construct an array for the end time of the injections
+sim_inspiral['geocent_end_time'] = np.array([int(time) for time in data_inj['injections']['end_time'][:]])
+sim_inspiral['geocent_end_time_ns'] = np.array([int(time % 1 * 1e9) for time in data_inj['injections']['end_time'][:]])
+
+# construct an array for mass quantities
+sim_inspiral['mass1'] = data_inj['mass1'][:]
+sim_inspiral['mass2'] = data_inj['mass2'][:]
+sim_inspiral['mtotal'] = sim_inspiral['mass1'] + sim_inspiral['mass2']
+sim_inspiral['mchirp'] = [pnutils.mass1_mass2_to_mchirp_eta(mass1, mass2)[0] for mass1,mass2 in zip(sim_inspiral['mass1'],sim_inspiral['mass2'])]
+sim_inspiral['eta'] = [pnutils.mass1_mass2_to_mchirp_eta(mass1, mass2)[1] for mass1,mass2 in zip(sim_inspiral['mass1'],sim_inspiral['mass2'])]
+
+# construct an array for coalescence phase
+sim_inspiral['coa_phase'] = data_inj['coa_phase'][:]
+
+# construct an array for distance quantities
+sim_inspiral['distance'] = data_inj['distance'][:]
+sim_inspiral['eff_dist_h'] = data_inj['eff_dist_h'][:]
+sim_inspiral['eff_dist_l'] = data_inj['eff_dist_l'][:]
+sim_inspiral['eff_dist_v'] = data_inj['eff_dist_v'][:]
+
+# construct an array for sky location quantities
+sim_inspiral['longitude'] = data_inj['longitude'][:]
+sim_inspiral['latitude'] = data_inj['latitude'][:]
+sim_inspiral['inclination'] = data_inj['inclination'][:]
+sim_inspiral['polarization'] = data_inj['polarization'][:]
+
+# construct an array for spin quantities
+sim_inspiral['spin1x'] = data_inj['spin1x'][:]
+sim_inspiral['spin1y'] = data_inj['spin1y'][:]
+sim_inspiral['spin1z'] = data_inj['spin1z'][:]
+sim_inspiral['spin2x'] = data_inj['spin2x'][:]
+sim_inspiral['spin2y'] = data_inj['spin2y'][:]
+sim_inspiral['spin2z'] = data_inj['spin2z'][:]
+
+# insert rows into experiment table
+logging.info('Populating sim_inspiral table...')
+sqlite_insert_into_table(dbtables.lsctables.SimInspiralTable, sim_inspiral)
 
 # save database and exit
 logging.info('Done.')
