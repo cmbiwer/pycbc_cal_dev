@@ -246,7 +246,7 @@ for dataset in dataset_list:
     coinc_inspiral['ifos'] = coinc_event['instruments']
 
     # construct an array for false_alarm_rate
-    coinc_inspiral['false_alarm_rate'] = np.array([1./ifar for ifar in data_coinc[dataset]['ifar'][:]])
+    coinc_inspiral['combined_far'] = np.array([1./ifar for ifar in data_coinc[dataset]['ifar'][:]])
 
     # construct an array for minimum_duration
     # FIXME: add this; is this used?
@@ -261,8 +261,9 @@ for dataset in dataset_list:
     # construct an array for end_time and end_time_ns
     # FIXME: add this
 
-    # construct an array for combined_far
-    # FIXME: add this
+    # construct an array for false_alarm_rate
+    # FIXME: add this; without this column cannot do ligolw_cbc_plotifar --plot-uncombined
+#    coinc_inspiral['false_alarm_rate'] = np.array([1./ifar for ifar in data_coinc[dataset]['ifar'][:]])
 
     # insert rows into coinc_inspiral table
     logging.info('Populating %s rows in the coinc_inspiral table...'%dataset)
@@ -350,6 +351,7 @@ for dataset in dataset_list:
     time_slide['instrument'] = np.array([','.join([ifo1, ifo2]) for j in range(num_coinc_trigs)])
 
     # construct an array for the offset of the time slide
+    # FIXME: offset needs to be multipled by time_slide_interval in attrs of coinc file
     if dataset == 'background':
         time_slide['offset'] = data_coinc[dataset]['timeslide_id'][:]
     else:
