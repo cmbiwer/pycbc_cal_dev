@@ -462,7 +462,6 @@ sim_inspiral['geocent_end_time_ns'] = np.array([int(time % 1 * 1e9) for time in 
 # construct an array for mass quantities
 sim_inspiral['mass1'] = data_inj['injections']['mass1'][:]
 sim_inspiral['mass2'] = data_inj['injections']['mass2'][:]
-sim_inspiral['mtotal'] = sim_inspiral['mass1'] + sim_inspiral['mass2']
 sim_inspiral['mchirp'] = [pnutils.mass1_mass2_to_mchirp_eta(mass1, mass2)[0] for mass1,mass2 in zip(sim_inspiral['mass1'],sim_inspiral['mass2'])]
 sim_inspiral['eta'] = [pnutils.mass1_mass2_to_mchirp_eta(mass1, mass2)[1] for mass1,mass2 in zip(sim_inspiral['mass1'],sim_inspiral['mass2'])]
 
