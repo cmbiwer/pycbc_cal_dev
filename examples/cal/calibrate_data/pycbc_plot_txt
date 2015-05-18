@@ -5,10 +5,11 @@ Simple script to plot a txt file created by a TimeSeries.
 """
 
 import matplotlib.pyplot as plt
+import sys
 
 from pycbc import types
 
-timeseries = types.load_timeseries('output/test.txt')
+timeseries = types.load_timeseries(sys.argv[1])
 
 plt.plot(timeseries.sample_times, timeseries.numpy())
 print 'showing plot'

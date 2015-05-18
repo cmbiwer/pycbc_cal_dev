@@ -23,7 +23,7 @@ frame_filenames = [entry.path for entry in frame_cache]
 
 # get channel data from frame files
 logging.info('Reading frame files...')
-data = frame.read_frame(frame_filenames, channel_name, start_time=1102660000, end_time=1102660200)
+data = frame.read_frame(frame_filenames, channel_name, start_time=1102660100, end_time=1102660150)
 data.save('output/frame.txt')
 
 # plot
