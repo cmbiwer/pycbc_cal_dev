@@ -28,10 +28,10 @@ from pycbc import pnutils
 
 # initializations
 filename_db = 'test.db'
-filename_tmpltbank = '/home/ahnitz/projects/BNS/snrthreshold/mdc/ns/SNR_5.0/bank/H1L1-BANK2HDF-966384015-1000000.hdf'
-filenames_sngl = ['/home/ahnitz/projects/BNS/snrthreshold/mdc/ns/SNR_5.0/full_data/H1-HDF_TRIGGER_MERGE_FULL_DATA-966384015-1000000.hdf',
-                  '/home/ahnitz/projects/BNS/snrthreshold/mdc/ns/SNR_5.0/full_data/L1-HDF_TRIGGER_MERGE_FULL_DATA-966384015-1000000.hdf']
-filename_coinc = '/home/ahnitz/projects/BNS/snrthreshold/mdc/ns/SNR_5.0/full_data/H1L1-STATMAP_FULL_DATA_FULL_12H-966384015-1000000.hdf'
+filename_tmpltbank = '/home/ahnitz/projects/BNS/snrthreshold/mdc/ns/SNR_6.0/bank/H1L1-BANK2HDF-966384015-1000000.hdf'
+filenames_sngl = ['/home/ahnitz/projects/BNS/snrthreshold/mdc/ns/SNR_6.0/full_data/H1-HDF_TRIGGER_MERGE_FULL_DATA-966384015-1000000.hdf',
+                  '/home/ahnitz/projects/BNS/snrthreshold/mdc/ns/SNR_6.0/full_data/L1-HDF_TRIGGER_MERGE_FULL_DATA-966384015-1000000.hdf']
+filename_coinc = '/home/ahnitz/projects/BNS/snrthreshold/mdc/ns/SNR_6.0/full_data/H1L1-STATMAP_FULL_DATA_FULL_12H-966384015-1000000.hdf'
 filenames_inj = ['']
 filenames_segments = ''
 filenames_vetoes  = ['']
@@ -128,10 +128,6 @@ for t in (np.int8, np.int16, np.int32, np.int64, np.uint8,
 # tell sqlite3 about numpy float datatypes
 for t in (np.float32,):
    sqlite3.register_adapter(t, float)
-
-###############################################################################
-# coinc maps
-###############################################################################
 
 # read HDF5 coincidence file
 data_coinc = h5py.File(filename_coinc, 'r')
@@ -368,7 +364,7 @@ for dataset in dataset_list:
     if dataset == 'background':
         experiment_map['experiment_summ_id'] = np.array(['experiment_summary:experiment_summ_id:'+str(timeslide) for timeslide in data_coinc[dataset]['timeslide_id'][:]])
     else:
-        experiment_map['experiment_summ_id'] = np.array(['time_slide:time_slide_id:0' for i in range(num_coinc_trigs)])
+        experiment_map['experiment_summ_id'] = np.array(['experiment_summary:experiment_summ_id:0' for i in range(num_coinc_trigs)])
 
     # construct an array for the coinc_event_id
     experiment_map['coinc_event_id'] = coinc_event_map['event_id'] 
@@ -390,13 +386,15 @@ for dataset in dataset_list:
     # construct an array for the time slide ID
     experiment_summary['time_slide_id']  = time_slide['time_slide_id']
 
-    # construct an array for the experiment datatype
+    # construct an array for the experiment datatype and experiment_id
     # all_data : a zero-lag experiment
     # slide    : a time slide experiment
     if dataset == 'background':
         experiment_summary['datatype'] = np.array(['slide' for i in range(len(time_slide['time_slide_id']))])
+        experiment_summary['experiment_id'] = np.array(['experiment:experiment_id:0' for i in range(len(time_slide['time_slide_id']))])
     else:
         experiment_summary['datatype']  = ['all_data']
+        experiment_summary['experiment_id'] = ['experiment:experiment_id:0']
 
     # insert rows into experiment table
     logging.info('Populating experiment_summary table...')
