@@ -460,34 +460,34 @@ sim_inspiral['geocent_end_time'] = np.array([int(time) for time in data_inj['inj
 sim_inspiral['geocent_end_time_ns'] = np.array([int(time % 1 * 1e9) for time in data_inj['injections']['end_time'][:]])
 
 # construct an array for mass quantities
-sim_inspiral['mass1'] = data_inj['mass1'][:]
-sim_inspiral['mass2'] = data_inj['mass2'][:]
+sim_inspiral['mass1'] = data_inj['injections']['mass1'][:]
+sim_inspiral['mass2'] = data_inj['injections']['mass2'][:]
 sim_inspiral['mtotal'] = sim_inspiral['mass1'] + sim_inspiral['mass2']
 sim_inspiral['mchirp'] = [pnutils.mass1_mass2_to_mchirp_eta(mass1, mass2)[0] for mass1,mass2 in zip(sim_inspiral['mass1'],sim_inspiral['mass2'])]
 sim_inspiral['eta'] = [pnutils.mass1_mass2_to_mchirp_eta(mass1, mass2)[1] for mass1,mass2 in zip(sim_inspiral['mass1'],sim_inspiral['mass2'])]
 
 # construct an array for coalescence phase
-sim_inspiral['coa_phase'] = data_inj['coa_phase'][:]
+sim_inspiral['coa_phase'] = data_inj['injections']['coa_phase'][:]
 
 # construct an array for distance quantities
-sim_inspiral['distance'] = data_inj['distance'][:]
-sim_inspiral['eff_dist_h'] = data_inj['eff_dist_h'][:]
-sim_inspiral['eff_dist_l'] = data_inj['eff_dist_l'][:]
-sim_inspiral['eff_dist_v'] = data_inj['eff_dist_v'][:]
+sim_inspiral['distance'] = data_inj['injections']['distance'][:]
+sim_inspiral['eff_dist_h'] = data_inj['injections']['eff_dist_h'][:]
+sim_inspiral['eff_dist_l'] = data_inj['injections']['eff_dist_l'][:]
+sim_inspiral['eff_dist_v'] = data_inj['injections']['eff_dist_v'][:]
 
 # construct an array for sky location quantities
-sim_inspiral['longitude'] = data_inj['longitude'][:]
-sim_inspiral['latitude'] = data_inj['latitude'][:]
-sim_inspiral['inclination'] = data_inj['inclination'][:]
-sim_inspiral['polarization'] = data_inj['polarization'][:]
+sim_inspiral['longitude'] = data_inj['injections']['longitude'][:]
+sim_inspiral['latitude'] = data_inj['injections']['latitude'][:]
+sim_inspiral['inclination'] = data_inj['injections']['inclination'][:]
+sim_inspiral['polarization'] = data_inj['injections']['polarization'][:]
 
 # construct an array for spin quantities
-sim_inspiral['spin1x'] = data_inj['spin1x'][:]
-sim_inspiral['spin1y'] = data_inj['spin1y'][:]
-sim_inspiral['spin1z'] = data_inj['spin1z'][:]
-sim_inspiral['spin2x'] = data_inj['spin2x'][:]
-sim_inspiral['spin2y'] = data_inj['spin2y'][:]
-sim_inspiral['spin2z'] = data_inj['spin2z'][:]
+sim_inspiral['spin1x'] = data_inj['injections']['spin1x'][:]
+sim_inspiral['spin1y'] = data_inj['injections']['spin1y'][:]
+sim_inspiral['spin1z'] = data_inj['injections']['spin1z'][:]
+sim_inspiral['spin2x'] = data_inj['injections']['spin2x'][:]
+sim_inspiral['spin2y'] = data_inj['injections']['spin2y'][:]
+sim_inspiral['spin2z'] = data_inj['injections']['spin2z'][:]
 
 # insert rows into experiment table
 logging.info('Populating sim_inspiral table...')
