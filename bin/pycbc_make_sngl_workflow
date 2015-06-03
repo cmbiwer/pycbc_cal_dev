@@ -435,7 +435,7 @@ for psd in psds:
 
     # setup plot PSD nodes
     image_dir = outputDir+'/psds/jobs/'+str(psd.segment[0])+'-'+str(psd.segment[1])
-    image_file = _workflow.File(trigs_ifo, 'PLOTPSD',
+    image_file = _workflow.File(psd.ifo, 'PLOTPSD',
                                 psd.segment,
                                 directory=image_dir,
                                 extension='png', tags=psd.tags)
