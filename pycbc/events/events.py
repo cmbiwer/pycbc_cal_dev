@@ -199,6 +199,36 @@ class EventManager(object):
         remove = [i for i, e in enumerate(self.events) if \
             newsnr(abs(e['snr']), e['chisq'] / e['chisq_dof']) < threshold]
         self.events = numpy.delete(self.events, remove)
+        
+    def keep_near_injection(self, window, injections):
+        from pycbc.events.veto import indices_within_times
+        if len(self.events) == 0:
+            return
+        
+        inj_time = numpy.array(injections.end_times())
+        gpstime = self.events['time_index'].astype(numpy.float64)
+        gpstime = gpstime / self.opt.sample_rate + self.opt.gps_start_time
+        i = indices_within_times(gpstime, inj_time - window, inj_time + window)
+        self.events = self.events[i]
+
+    def keep_loudest_in_interval(self, window, num_keep):
+        if len(self.events) == 0:
+            return
+        
+        e = self.events
+        stat = newsnr(abs(e['snr']), e['chisq'] / e['chisq_dof'])
+        time = e['time_index']
+        
+        wtime = (time / window).astype(numpy.int32)
+        bins = numpy.unique(wtime)
+        
+        keep = []
+        for b in bins:
+            bloc = numpy.where((wtime == b))[0]
+            bloudest = stat[bloc].argsort()[-num_keep:]
+            keep.append(bloc[bloudest])
+        keep = numpy.concatenate(keep)
+        self.events = e[keep]
 
     def maximize_over_bank(self, tcolumn, column, window):
         if len(self.events) == 0:
@@ -291,17 +321,17 @@ class EventManager(object):
 
     def write_events(self, outname):
         """ Write the found events to a sngl inspiral table
-        """ 
+        """
         self.make_output_dir(outname)
-        
+
         if '.xml' in outname:
             self.write_to_xml(outname)
         elif '.hdf' in outname:
             self.write_to_hdf(outname)
         else:
             raise ValueError('Cannot write to this format')
-    
-    def write_to_hdf(self, outname):  
+
+    def write_to_hdf(self, outname):
         class fw(object):
             def __init__(self, name, prefix):
                 import h5py
@@ -310,22 +340,22 @@ class EventManager(object):
 
             def __setitem__(self, name, data):
                 col = self.prefix + '/' + name
-                self.f.create_dataset(col, data=data, 
-                                      compression='gzip', 
+                self.f.create_dataset(col, data=data,
+                                      compression='gzip',
                                       compression_opts=9,
                                       shuffle=True)
-                       
+
         self.events.sort(order='template_id')
-              
+
         # Template id hack
         m1 = numpy.array([p['tmplt'].mass1 for p in self.template_params], dtype=numpy.float32)
         m2 = numpy.array([p['tmplt'].mass2 for p in self.template_params], dtype=numpy.float32)
         s1 = numpy.array([p['tmplt'].spin1z for p in self.template_params], dtype=numpy.float32)
-        s2 = numpy.array([p['tmplt'].spin2z for p in self.template_params], dtype=numpy.float32) 
+        s2 = numpy.array([p['tmplt'].spin2z for p in self.template_params], dtype=numpy.float32)
         th = numpy.zeros(len(m1), dtype=int)
         for j, v in enumerate(zip(m1, m2, s1, s2)):
             th[j] = hash(v)
-        
+
         tid = self.events['template_id']
         f = fw(outname, self.opt.channel_name[0:2])
 
@@ -334,15 +364,16 @@ class EventManager(object):
             f['coa_phase'] = numpy.angle(self.events['snr'])
             f['chisq'] = self.events['chisq']
             f['bank_chisq'] = self.events['bank_chisq']
+            f['bank_chisq_dof'] = self.events['bank_chisq_dof']
             f['cont_chisq'] = self.events['cont_chisq']
             f['end_time'] = self.events['time_index'] / float(self.opt.sample_rate) + self.opt.gps_start_time
-            
+
             template_sigmasq = numpy.array([t['sigmasq'] for t in self.template_params], dtype=numpy.float32)
             f['sigmasq'] = template_sigmasq[tid]
 
             template_durations = [p['tmplt'].template_duration for p in self.template_params]
-            f['template_duration'] = numpy.array(template_durations, dtype=numpy.float32)[tid]        
-         
+            f['template_duration'] = numpy.array(template_durations, dtype=numpy.float32)[tid]
+
             # FIXME: Can we get this value from the autochisq instance?
             cont_dof = self.opt.autochi_number_points
             if self.opt.autochi_onesided is None:
@@ -352,7 +383,6 @@ class EventManager(object):
             if self.opt.autochi_max_valued_dof:
                 cont_dof = self.opt.autochi_max_valued_dof
             f['cont_chisq_dof'] = numpy.repeat(cont_dof, len(self.events))
-            f['bank_chisq_dof'] = numpy.repeat(10, len(self.events))
 
             if 'chisq_dof' in self.events.dtype.names:
                 f['chisq_dof'] = self.events['chisq_dof'] / 2 + 1
@@ -360,19 +390,19 @@ class EventManager(object):
                 f['chisq_dof'] = numpy.zeros(len(self.events))
 
             f['template_hash'] = th[tid]
-            
+
         if self.opt.trig_start_time:
             f['search/start_time'] = numpy.array([self.opt.trig_start_time])
         else:
             f['search/start_time'] = numpy.array([self.opt.gps_start_time + self.opt.segment_start_pad])
-            
+
         if self.opt.trig_end_time:
             f['search/end_time'] = numpy.array([self.opt.trig_end_time])
         else:
             f['search/end_time'] = numpy.array([self.opt.gps_end_time - self.opt.segment_end_pad])
 
     def write_to_xml(self, outname):
-        """ Write the found events to a sngl inspiral table 
+        """ Write the found events to a sngl inspiral table
         """
         outdoc = glue.ligolw.ligolw.Document()
         outdoc.appendChild(glue.ligolw.ligolw.LIGO_LW())
@@ -390,27 +420,27 @@ class EventManager(object):
                                        glue.ligolw.lsctables.SnglInspiralTable)
         self._add_sngls_to_output(sngl_table, proc_id)
         outdoc.childNodes[0].appendChild(sngl_table)
-                
+
         # Create Search Summary Table ########################################
         search_summary_table = self._create_search_summary_table(proc_id,
                                                                len(sngl_table))
         outdoc.childNodes[0].appendChild(search_summary_table)
-        
+
         # Create Filter Table ########################################
         filter_table = self._create_filter_table(proc_id)
         outdoc.childNodes[0].appendChild(filter_table)
-        
+
         # SumVars Table ########################################
         search_summvars_table = self._create_search_summvars_table(proc_id)
         outdoc.childNodes[0].appendChild(search_summvars_table)
-        
+
         # SumValue Table ########################################
         summ_value_table = self._create_summ_val_table(proc_id)
         outdoc.childNodes[0].appendChild(summ_value_table)
-        
+
         # Write out file #####################################################
         glue.ligolw.utils.write_filename(outdoc, outname,
-                                         gz=outname.endswith('gz'))    
+                                         gz=outname.endswith('gz'))
 
     def _add_sngls_to_output(self, sngl_table, proc_id, ifo=None, channel=None,
                              start_time=None, sample_rate=None,
@@ -434,7 +464,7 @@ class EventManager(object):
                 channel = {}
                 for ifo in self.ifos:
                     channel[ifo] = self.opt.channel_name[ifo].split(':')[1]
-            else:            
+            else:
                 channel = self.opt.channel_name.split(':')[1]
 
         for event_num, event in enumerate(self.events):
@@ -461,22 +491,20 @@ class EventManager(object):
             # FIXME: This is *not* the dof!!!
             # but is needed for later programs not to fail
             if 'chisq_dof' in event.dtype.names:
-                # fail through: copy the value from the trigger
                 row.chisq_dof = event['chisq_dof'] / 2 + 1
             else:
                 row.chisq_dof = 0
 
             if hasattr(self.opt, 'bank_veto_bank_file')\
                     and self.opt.bank_veto_bank_file:
-                # FIXME: Why is this hardcoded?
-                row.bank_chisq_dof = 10
                 row.bank_chisq = event['bank_chisq']
+                row.bank_chisq_dof = event['bank_chisq_dof']
             else:
                 row.bank_chisq_dof = 0
                 row.bank_chisq = 0
 
             if hasattr(self.opt, 'autochi_number_points')\
-                    and self.opt.autochi_number_points>0:
+                    and self.opt.autochi_number_points > 0:
                 row.cont_chisq = event['cont_chisq']
                 # FIXME: Can this come from the autochisq instance?
                 cont_dof = self.opt.autochi_number_points
@@ -520,7 +548,7 @@ class EventManager(object):
                 trig_end_time = self.opt.trig_end_time
             else:
                 trig_end_time = self.opt.gps_end_time - self.opt.segment_end_pad
-      
+
         search_summary_table = glue.ligolw.lsctables.New(\
                                       glue.ligolw.lsctables.SearchSummaryTable)
         row = glue.ligolw.lsctables.SearchSummary()
@@ -585,7 +613,7 @@ class EventManager(object):
         row.name = "filter data sample rate"
         row.string = ""
         row.value = 1.0 / sample_rate
-        row.search_summvar_id = str(glue.ligolw.lsctables.SearchSummVarsID(1))   
+        row.search_summvar_id = str(glue.ligolw.lsctables.SearchSummVarsID(1))
         search_summvars_table.append(row)
         return search_summvars_table
 
@@ -637,8 +665,8 @@ class EventManager(object):
         from pycbc import DYN_RANGE_FAC
         # FIXME: Lalapps did this "right" for non-spa waveforms.
         #        Should also be right here (maybe covering a range of masses)
-        row1.value = spa_distance(psd, 1.4, 1.4, self.opt.low_frequency_cutoff, 
-snr=8) * DYN_RANGE_FAC
+        row1.value = spa_distance(psd, 1.4, 1.4, self.opt.low_frequency_cutoff,
+                                  snr=8) * DYN_RANGE_FAC
         row1.comment = "1.4_1.4_8"
         row1.summ_value_id = str(glue.ligolw.lsctables.SummValueID(0))
         summ_value_table.append(row1)
@@ -717,7 +745,7 @@ class EventManagerMultiDet(EventManager):
                                                    self.event_index+num_events)
             self.template_event_dict[ifo]['event_id'] = new_event_ids
             self.event_index = self.event_index+num_events
-         
+
         if perform_coincidence:
             if not len(self.ifos) == 2:
                 err_msg = "Coincidence currently only supported for 2 ifos."
@@ -749,7 +777,7 @@ class EventManagerMultiDet(EventManager):
                                                         dtype=self.event_dtype)
 
     def write_events(self, outname):
-        """ Write the found events to a sngl inspiral table 
+        """ Write the found events to a sngl inspiral table
         """
         self.make_output_dir(outname)
         outdoc = glue.ligolw.ligolw.Document()
