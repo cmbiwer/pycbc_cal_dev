@@ -6,23 +6,6 @@ SEARCH=${1}
 # get the configuration file from the command line
 INSTALLED_CONFIG_FILES=${2}
 
-# FIXME: The next lines have been added to the command line
-# because we are running on both the GDS and OAF calibrations,
-# and they use the same ini file except for switching the
-# channel names, frame types, and segment names
-
-# get the channel names
-H1_CHANNEL_NAME=${3}
-L1_CHANNEL_NAME=${4}
-
-# get the frame types
-H1_FRAME_TYPE=${5}
-L1_FRAME_TYPE=${6}
-
-# get the segment names
-H1_SEGMENT_NAME=${7}
-L1_SEGMENT_NAME=${8}
-
 # get midnight from yesterday in form of MM/DD/YYYY
 YESTERDAY=`date -u --date="yesterday" +"%x"`
 
@@ -52,13 +35,6 @@ pycbc_make_sngl_workflow --name ${WORKFLOW_NAME} \
                          --config-overrides workflow:start-time:${GPS_START_TIME} \
                            workflow:end-time:${GPS_END_TIME} \
                            workflow:workflow-html-basedir:${HTMLDIR} \
-                           workflow:h1-channel-name:${H1_CHANNEL_NAME} \
-                           workflow:l1-channel-name:${L1_CHANNEL_NAME} \
-                           workflow-datafind:datafind-h1-frame-type:${H1_FRAME_TYPE} \
-                           workflow-datafind:datafind-l1-frame-type:${L1_FRAME_TYPE} \
-                           workflow-segments:segments-h1-science-name:${H1_SEGMENT_NAME} \
-                           workflow-segments:segments-l1-science-name:${L1_SEGMENT_NAME} \
-                           pegasus_profile:condor|accounting_group = ligo.prod.o1.detchar.singleifo.dailyahope \
                            html:analysis-subtitle:${MONTH}/${DAY} > ${WORKFLOW_NAME}.out 2>&1
 
 # generate workflow
