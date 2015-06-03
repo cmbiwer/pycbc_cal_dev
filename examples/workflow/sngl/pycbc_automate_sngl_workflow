@@ -50,15 +50,16 @@ cd /home/${USER}/sngl_er6/${SEARCH}/${MONTH}/${DAY}
 pycbc_make_sngl_workflow --name ${WORKFLOW_NAME} \
                          --installed-config-files ${INSTALLED_CONFIG_FILES} \
                          --config-overrides workflow:start-time:${GPS_START_TIME} \
-                                            workflow:end-time:${GPS_END_TIME} \
-                                            workflow:workflow-html-basedir:${HTMLDIR} \
-                                            workflow:h1-channel-name:${H1_CHANNEL_NAME} \
-                                            workflow:l1-channel-name:${L1_CHANNEL_NAME} \
-                                            workflow-datafind:datafind-h1-frame-type:${H1_FRAME_TYPE} \
-                                            workflow-datafind:datafind-l1-frame-type:${L1_FRAME_TYPE} \
-                                            workflow-segments:segments-h1-science-name:${H1_SEGMENT_NAME} \
-                                            workflow-segments:segments-l1-science-name:${L1_SEGMENT_NAME} \
-                                            html:analysis-subtitle:${MONTH}/${DAY} > ${WORKFLOW_NAME}.out 2>&1
+                           workflow:end-time:${GPS_END_TIME} \
+                           workflow:workflow-html-basedir:${HTMLDIR} \
+                           workflow:h1-channel-name:${H1_CHANNEL_NAME} \
+                           workflow:l1-channel-name:${L1_CHANNEL_NAME} \
+                           workflow-datafind:datafind-h1-frame-type:${H1_FRAME_TYPE} \
+                           workflow-datafind:datafind-l1-frame-type:${L1_FRAME_TYPE} \
+                           workflow-segments:segments-h1-science-name:${H1_SEGMENT_NAME} \
+                           workflow-segments:segments-l1-science-name:${L1_SEGMENT_NAME} \
+                           pegasus_profile:condor|accounting_group = ligo.prod.o1.detchar.singleifo.dailyahope \
+                           html:analysis-subtitle:${MONTH}/${DAY} > ${WORKFLOW_NAME}.out 2>&1
 
 # generate workflow
 pycbc_basic_pegasus_plan ${WORKFLOW_NAME}.dax /usr1/${USER}/sngl/${SEARCH} >> ${WORKFLOW_NAME}.out 2>&1
