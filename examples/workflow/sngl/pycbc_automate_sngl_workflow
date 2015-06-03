@@ -26,8 +26,8 @@ WORKFLOW_NAME=sngl_${SEARCH}_${DAY}
 HTMLDIR=/home/${USER}/public_html/daily_cbc_offline/${SEARCH}/${MONTH}/${DAY}
 
 # mkdir a dir for the month in the format YYYYMM
-mkdir -p /home/${USER}/sngl_er6/${SEARCH}/${MONTH}/${DAY}
-cd /home/${USER}/sngl_er6/${SEARCH}/${MONTH}/${DAY}
+mkdir -p /home/${USER}/sngl_er7/${SEARCH}/${MONTH}/${DAY}
+cd /home/${USER}/sngl_er7/${SEARCH}/${MONTH}/${DAY}
 
 # generate the workflow
 pycbc_make_sngl_workflow --name ${WORKFLOW_NAME} \
