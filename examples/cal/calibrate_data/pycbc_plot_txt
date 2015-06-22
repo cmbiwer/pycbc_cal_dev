@@ -11,6 +11,10 @@ from pycbc import types
 
 timeseries = types.load_timeseries(sys.argv[1])
 
-plt.plot(timeseries.sample_times, timeseries.numpy())
+start = 90
+sample_rate = 16384
+t0 = start*sample_rate
+
+plt.plot(timeseries.sample_times[t0:], timeseries.numpy()[t0:])
 print 'showing plot'
 plt.show()

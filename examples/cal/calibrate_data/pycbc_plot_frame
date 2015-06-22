@@ -18,16 +18,16 @@ logging.basicConfig(format='%(asctime)s : %(message)s', level=logging_level)
 
 # read frame cache
 logging.info('Reading cache file...')
-frame_cache = lal.Cache.fromfilenames(['frame_caches/L1-DATAFIND-1102660000-200.lcf'])
+frame_cache = lal.Cache.fromfilenames([sys.argv[2]])
 frame_filenames = [entry.path for entry in frame_cache]
 
 # get channel data from frame files
 logging.info('Reading frame files...')
-data = frame.read_frame(frame_filenames, channel_name, start_time=1102660100, end_time=1102660150)
+data = frame.read_frame(frame_filenames, channel_name, start_time=sys.argv[3], end_time=sys.argv[4])
 data.save('output/frame.txt')
 
 # plot
 timeseries = types.load_timeseries('output/frame.txt')
-plt.scatter(timeseries.sample_times, timeseries.numpy())
+plt.plot(timeseries.sample_times, timeseries.numpy())
 print 'showing plot'
 plt.show()
