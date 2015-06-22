@@ -49,7 +49,6 @@ logging.info('Reading filter files...')
 filter_file = FilterFile(opts.filter_file)
 
 # put data into arrays
-#data = highpass(data, frequency=15.0)
 data = filter_zpk(data, [100]*5, [1]*5, 1e-10)
 
 # write output

@@ -7,6 +7,7 @@ from glue import lal
 from glue import segments
 from pycbc import frame
 from pycbc import types
+from pycbc.filter.zpk import filter_zpk
 
 import ROOT
 ROOT.gSystem.Load('/usr/lib64/libdmtsigp.so')
@@ -28,8 +29,6 @@ opts = parser.parse_args()
 
 # initializations
 channel_names = []
-#channel_names += ['L1:LSC-DARM_IN1_DQ']
-#channel_names += ['L1:LSC-DARM_OUT_DQ']
 channel_names += ['L1:CAL-DARM_ERR_WHITEN_OUT_DQ']
 channel_names += ['L1:CAL-DARM_CTRL_WHITEN_OUT_DQ']
 
@@ -51,9 +50,10 @@ logging.info('Reading filter files...')
 filter_file = FilterFile(opts.filter_file)
 
 # put data into arrays
-darm_in1 = filter_zpk(dat[0]
-darm_in1 = data[0].numpy()
-darm_out = data[1].numpy()
+darm_in1 = filter_zpk(data[0], [100]*5, [1]*5, 1e-10)
+darm_in1 = darm_in1.numpy()
+darm_out = filter_zpk(data[1], [100]*5, [1]*5, 1e-10)
+darm_out = darm_out.numpy()
 
 def filter_data(data, frame_filenames, swstat_channel_name, bits,
                 filter_name, start_time, end_time):
