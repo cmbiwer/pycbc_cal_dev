@@ -42,36 +42,8 @@ logging.info('Reading filter files...')
 filter_file = FilterFile(opts.filter_file)
 
 # loop over bits that state if the filter was on or off
-swstat = frame.read_frame(frame_filenames, opts.channel_name,
+gain = frame.read_frame(frame_filenames, opts.channel_name,
                   start_time=opts.gps_start_time, end_time=opts.gps_end_time)
 
-print swstat[0]
-
-print bin(int(swstat[0]))
-
-fb = {0:[],
-      1:[],
-      2:[],
-      3:[],
-      4:[],
-      5:[],
-      6:[],
-      7:[],
-      8:[],
-      9:[],
-}
-
-for i in range(len(swstat)):
-
-    bits = bin(ctypes.c_int.from_buffer(ctypes.c_float(swstat[i])).value)[2:12]
-
-    for j in range(len(bits)):
-        if i == 0:
-            fb[j].append( (i,bits[j]) )
-        elif i > 0 and bits[j] != fb[j][-1][1]:
-            fb[j].append( (i,bits[j]) )
-
-print fb
-
-# exit
-logging.info('Done.')
+print gain[:10]
+print gain[0]
