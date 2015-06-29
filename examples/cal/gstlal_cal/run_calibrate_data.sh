@@ -13,4 +13,4 @@ FILTER_FILE=../calibrate_data/filter_files/L1OAF_8379.txt
 ligo_data_find --lal-cache --observatory ${IFO} --type ${FRAME_TYPE} --gps-start-time ${GPS_START_TIME} --gps-end-time ${GPS_END_TIME} --url-type file > ${FRAME_CACHE}
 
 # run executable that will calibrate data in the time domain with a foton filter file
-./pycbc_calibrate_data --gps-start-time ${GPS_START_TIME} --gps-end-time ${GPS_END_TIME} --frame-cache ${FRAME_CACHE} --filter-file ${FILTER_FILE}
+echo ./pycbc_calibrate_data --gps-start-time ${GPS_START_TIME} --gps-end-time ${GPS_END_TIME} --frame-cache ${FRAME_CACHE} --filter-file ${FILTER_FILE}
