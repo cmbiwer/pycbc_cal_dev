@@ -38,4 +38,4 @@ pycbc_make_sngl_workflow --name ${WORKFLOW_NAME} \
                            html:analysis-subtitle:${MONTH}/${DAY} > ${WORKFLOW_NAME}.out 2>&1
 
 # generate workflow
-pycbc_basic_pegasus_plan ${WORKFLOW_NAME}.dax /usr1/${USER}/sngl/${SEARCH} >> ${WORKFLOW_NAME}.out 2>&1
+pycbc_submit_dax ${WORKFLOW_NAME}.dax 2>&1
