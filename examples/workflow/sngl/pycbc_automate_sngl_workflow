@@ -38,4 +38,4 @@ pycbc_make_sngl_workflow --name ${WORKFLOW_NAME} \
                            html:analysis-subtitle:${MONTH}/${DAY} > ${WORKFLOW_NAME}.out 2>&1
 
 # generate workflow
-pycbc_submit_dax ${WORKFLOW_NAME}.dax 2>&1
+/home/cbc/src/pycbc_master/bin/pycbc_submit_dax --dax ${WORKFLOW_NAME}.dax --local-dir /usr1/${USER}/sngl/${SEARCH} --accounting-group ligo.prod.o1.detchar.singleifo.dailyahope >> ${WORKFLOW_NAME}.out 2>&1
