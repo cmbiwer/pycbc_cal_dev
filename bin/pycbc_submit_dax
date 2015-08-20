@@ -80,6 +80,8 @@ PEG_DIR=`python -c 'from pycbc.workflow import PEGASUS_FILE_DIRECTORY;print PEGA
 SITE_TEMPLATE=$PEG_DIR/basic_site_template.xml
 
 export ACCOUNTING_GROUP
+ACCOUNTING_GROUP_USER=christopher.biwer
+export ACCOUNTING_GROUP_USER
 
 # Set up the site-local with the correct paths
 echo 'cat <<END_OF_TEXT' >  temp.sh
