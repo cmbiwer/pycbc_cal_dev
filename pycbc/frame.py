@@ -19,7 +19,7 @@ This modules contains functions for reading in data from frame files or caches
 import lalframe, logging
 import lal
 import numpy
-import os.path
+import os.path, glob
 from pycbc.types import TimeSeries
 
 
@@ -85,15 +85,14 @@ def locations_to_cache(locations):
         A cumulative lal cache object containing the files derived from the
     list of locations
     """
-
     cum_cache = lal.Cache()
     for source in locations:
-        dir_name, file_names = os.path.split(source)
-        base_name, file_extension = os.path.splitext(file_names)
+        for file_path in glob.glob(source):
+            dir_name, file_name = os.path.split(file_path)
+            base_name, file_extension = os.path.splitext(file_name)
 
-        for file_name in glob.glob(file_names):
             if file_extension == ".lcf" or file_extension == ".cache":
-                cache = lal.CacheImport(source)
+                cache = lal.CacheImport(file_path)
             elif file_extension == ".gwf": 
                 cache = lalframe.FrOpen(dir_name, file_name).cache
             else:
