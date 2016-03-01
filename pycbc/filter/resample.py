@@ -246,6 +246,7 @@ def resample_to_delta_t(timeseries, delta_t, method='butterworth'):
 
     >>> h_plus_sampled = resample_to_delta_t(h_plus, 1.0/2048)
     """
+    factor = int(delta_t / timeseries.delta_t)
 
     if not isinstance(timeseries,TimeSeries):
         raise TypeError("Can only resample time series")
@@ -262,8 +263,6 @@ def resample_to_delta_t(timeseries, delta_t, method='butterworth'):
         data = lal_data.data.data 
         
     elif method == 'ldas':  
-        factor = int(delta_t / timeseries.delta_t)
-        
         if factor == 8:
             timeseries = resample_to_delta_t(timeseries, timeseries.delta_t * 4.0, method='ldas')
             factor = 2
@@ -288,9 +287,11 @@ def resample_to_delta_t(timeseries, delta_t, method='butterworth'):
     else:
         raise ValueError('Invalid resampling method: %s' % method)
         
-    return TimeSeries(data, delta_t = delta_t,
+    ts = TimeSeries(data, delta_t = delta_t,
                       dtype=timeseries.dtype, 
                       epoch=timeseries._epoch)
+    ts.corrupted_samples = factor * 10
+    return ts
        
 
 _highpass_func = {numpy.dtype('float32'): lal.HighPassREAL4TimeSeries,
