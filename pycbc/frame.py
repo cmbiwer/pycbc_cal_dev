@@ -70,6 +70,38 @@ def _read_channel(channel, stream, start, duration):
     return TimeSeries(data.data.data, delta_t=data.deltaT, epoch=start, 
                       dtype=d_type)
 
+def locations_to_cache(locations):
+    """ Return a cumulative cache file build from the list of locations
+    
+    Parameters
+    ----------
+    locations : list
+        A list of strings containing files, globs, or cache files used to build
+    a combined lal cache file object.
+
+    Returns
+    -------
+    cache : lal.Cache
+        A cumulative lal cache object containing the files derived from the
+    list of locations
+    """
+
+    cum_cache = lal.Cache()
+    for source in locations:
+        dir_name, file_names = os.path.split(source)
+        base_name, file_extension = os.path.splitext(file_names)
+
+        for file_name in glob.glob(file_names):
+            if file_extension == ".lcf" or file_extension == ".cache":
+                cache = lal.CacheImport(source)
+            elif file_extension == ".gwf": 
+                cache = lalframe.FrOpen(dir_name, file_name).cache
+            else:
+                raise TypeError("Invalid location name")
+                
+            cum_cache = lal.CacheMerge(cum_cache, cache)
+    return cum_cache
+
 def read_frame(location, channels, start_time=None, 
                end_time=None, duration=None, check_integrity=True):
     """Read time series from frame data.
@@ -95,6 +127,8 @@ def read_frame(location, channels, start_time=None,
     duration : {None, float}, optional
         The amount of data to read in seconds. Note, this argument is 
         incompatible with `end`.
+    check_integrity : {True, boolean}, optional
+        Do fram
 
     Returns
     -------
@@ -111,20 +145,7 @@ def read_frame(location, channels, start_time=None,
     else:
         locations = [location]
 
-    cum_cache = lal.Cache()
-    for source in locations:
-        dir_name, file_name = os.path.split(source)
-        base_name, file_extension = os.path.splitext(file_name)
-    
-        if file_extension == ".lcf" or file_extension == ".cache":
-            cache = lal.CacheImport(source)
-        elif file_extension == ".gwf": 
-            cache = lalframe.FrOpen(dir_name, file_name).cache
-        else:
-            raise TypeError("Invalid location name")
-            
-        cum_cache = lal.CacheMerge(cum_cache, cache)
-        
+    cum_cache = locations_to_cache(locations)    
     stream = lalframe.FrStreamCacheOpen(cum_cache)
    
     if check_integrity:     
@@ -137,6 +158,7 @@ def read_frame(location, channels, start_time=None,
         first_channel = channels[0]
     else:
         first_channel = channels
+
     data_length = lalframe.FrStreamGetVectorLength(first_channel, stream)
     channel_type = lalframe.FrStreamGetTimeSeriesType(first_channel, stream)
     create_series_func = _fr_type_map[channel_type][2]
