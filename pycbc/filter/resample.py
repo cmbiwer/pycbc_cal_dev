@@ -246,8 +246,6 @@ def resample_to_delta_t(timeseries, delta_t, method='butterworth'):
 
     >>> h_plus_sampled = resample_to_delta_t(h_plus, 1.0/2048)
     """
-    factor = int(delta_t / timeseries.delta_t)
-
     if not isinstance(timeseries,TimeSeries):
         raise TypeError("Can only resample time series")
 
@@ -262,18 +260,20 @@ def resample_to_delta_t(timeseries, delta_t, method='butterworth'):
         _resample_func[timeseries.dtype](lal_data, delta_t)
         data = lal_data.data.data 
         
-    elif method == 'ldas':  
+    elif method == 'ldas': 
+        data = timeseries 
+        factor = int(delta_t / timeseries.delta_t)
         if factor == 8:
-            timeseries = resample_to_delta_t(timeseries, timeseries.delta_t * 4.0, method='ldas')
+            data = resample_to_delta_t(timeseries, timeseries.delta_t * 4.0, method='ldas')
             factor = 2
         elif factor == 16:
-            timeseries = resample_to_delta_t(timeseries, timeseries.delta_t * 4.0, method='ldas')
+            data = resample_to_delta_t(timeseries, timeseries.delta_t * 4.0, method='ldas')
             factor = 4 
         elif factor == 32:
-            timeseries = resample_to_delta_t(timeseries, timeseries.delta_t * 8.0, method='ldas')
+            data = resample_to_delta_t(timeseries, timeseries.delta_t * 8.0, method='ldas')
             factor = 4 
         elif factor == 64:
-            timeseries = resample_to_delta_t(timeseries, timeseries.delta_t * 16.0, method='ldas')
+            data = resample_to_delta_t(timeseries, timeseries.delta_t * 16.0, method='ldas')
             factor = 4 
 
         try:
@@ -282,7 +282,7 @@ def resample_to_delta_t(timeseries, delta_t, method='butterworth'):
             raise ValueError('Unsupported resample factor, %s, given' %factor)
             
         # apply the filter and decimate
-        data = fir_zero_filter(filter_coefficients, timeseries)[::factor]
+        data = fir_zero_filter(filter_coefficients, data)[::factor]
         
     else:
         raise ValueError('Invalid resampling method: %s' % method)
@@ -290,7 +290,7 @@ def resample_to_delta_t(timeseries, delta_t, method='butterworth'):
     ts = TimeSeries(data, delta_t = delta_t,
                       dtype=timeseries.dtype, 
                       epoch=timeseries._epoch)
-    ts.corrupted_samples = factor * 10
+    ts.corrupted_samples = int(delta_t / timeseries.delta_t) * 10 / factor
     return ts
        
 
