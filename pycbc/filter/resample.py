@@ -290,7 +290,7 @@ def resample_to_delta_t(timeseries, delta_t, method='butterworth'):
     ts = TimeSeries(data, delta_t = delta_t,
                       dtype=timeseries.dtype, 
                       epoch=timeseries._epoch)
-    ts.corrupted_samples = int(delta_t / timeseries.delta_t) * 10 / factor
+    ts.corrupted_samples = 10
     return ts
        
 
