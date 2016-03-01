@@ -400,7 +400,10 @@ class DataBuffer(object):
         self.channel_type, self.sample_rate = self._retrieve_metadata(self.stream, self.channel_name)
 
         raw_size = self.sample_rate * max_buffer
-        self.raw_buffer = zeros(raw_size, dtype=numpy.float64)
+        self.raw_buffer = TimeSeries(zeros(raw_size, dtype=numpy.float64),
+                                     copy=False,
+                                     epoch=start_time,
+                                     delta_t=1.0/self.sample_rate)
 
     def update_cache(self):
         """ Reset the lal cache. This can be used to update the cache if the 
