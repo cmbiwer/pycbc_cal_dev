@@ -20,7 +20,7 @@ import lalframe, logging
 import lal
 import numpy
 import os.path, glob
-from pycbc.types import TimeSeries
+from pycbc.types import TimeSeries, zeros
 
 
 # map LAL series types to corresponding functions and Numpy types
@@ -383,4 +383,66 @@ def write_frame(location, channels, timeseries):
 
     # write frame
     lalframe.FrameWrite(frame, location)
+
+class DataBuffer(object):
+    """ A linear buffer that acts a a FILO for reading in frame data
+    """
+
+    def __init__(self, frame_src, 
+                       channel_name,
+                       start_time,
+                       max_buffer=2048):
+        self.frame_src = frame_src
+        self.channel_name = channel_name
+        self.read_pos = start_time
+
+        self.update_cache()
+        self.channel_type, self.sample_rate = self._retrieve_metadata(self.stream, self.channel_name)
+
+        raw_size = self.sample_rate * max_buffer
+        self.raw_buffer = zeros(raw_size, dtype=numpy.float64)
+
+    def update_cache(self):
+        """ Reset the lal cache. This can be used to update the cache if the 
+        result may change due to more files being added to the filesystem, 
+        for example.
+        """
+        cache = locations_to_cache(self.frame_src)
+        stream = lalframe.FrStreamCacheOpen(cache)
+        self.stream = stream
+
+    def _retrieve_metadata(self, stream, channel_name):
+        """ Retrieve basic metadata by reading the first file in the cache
+        """
+        data_length = lalframe.FrStreamGetVectorLength(channel_name, stream)
+        channel_type = lalframe.FrStreamGetTimeSeriesType(channel_name, stream)
+        create_series_func = _fr_type_map[channel_type][2]
+        get_series_metadata_func = _fr_type_map[channel_type][3]
+        series = create_series_func(channel_name, stream.epoch, 0, 0,
+                            lal.ADCCountUnit, 0)
+        get_series_metadata_func(series, stream)
+        return channel_type, int(1.0/series.deltaT)        
+
+    def _read_frame(self, blocksize):
+        """ Try to read the block of data blocksize seconds long
+        """
+        try:
+            read_func = _fr_type_map[self.channel_type][0]
+            dtype = _fr_type_map[self.channel_type][1]
+            data = read_func(self.stream, self.channel_name, self.read_pos, blocksize, 0)
+            return TimeSeries(data.data.data, delta_t=data.deltaT,
+                              epoch=self.read_pos, 
+                              dtype=dtype)     
+        except:
+            raise RuntimeError('Cannot read requested frame data') 
+
+    def advance(self, blocksize):
+        """ Add blocksize seconds more to the buffer, push blocksize seconds
+        from the beginning.
+        """
+        ts = self._read_frame(blocksize)
+        self.raw_buffer.roll(-len(ts))
+        self.raw_buffer[-len(ts):] = ts[:] 
+        self.read_pos += blocksize
+        return ts
 
