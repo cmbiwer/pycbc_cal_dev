@@ -402,7 +402,7 @@ class DataBuffer(object):
         raw_size = self.sample_rate * max_buffer
         self.raw_buffer = TimeSeries(zeros(raw_size, dtype=numpy.float64),
                                      copy=False,
-                                     epoch=start_time,
+                                     epoch=start_time - max_buffer,
                                      delta_t=1.0/self.sample_rate)
 
     def update_cache(self):
@@ -447,5 +447,6 @@ class DataBuffer(object):
         self.raw_buffer.roll(-len(ts))
         self.raw_buffer[-len(ts):] = ts[:] 
         self.read_pos += blocksize
+        self.raw_buffer.start_time += blocksize
         return ts
 
