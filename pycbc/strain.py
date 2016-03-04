@@ -1026,7 +1026,8 @@ class StrainBuffer(pycbc.frame.DataBuffer):
         self.factor = int(1.0 / self.raw_buffer.delta_t / self.sample_rate)
         self.corruption = self.highpass_samples / self.factor + resample_corruption
 
-        self.sample_corr = self.corruption + self.psd_inverse_length * self.sample_rate
+        self.psd_corruption =  self.psd_inverse_length * self.sample_rate
+        self.total_corruption = self.corruption + self.psd_corruption
         self.segments = {}
 
     def recalculate_psd(self):
