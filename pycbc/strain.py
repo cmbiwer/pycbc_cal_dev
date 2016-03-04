@@ -1054,6 +1054,7 @@ class StrainBuffer(pycbc.frame.DataBuffer):
             psd = pycbc.psd.inverse_spectrum_truncation(psd, 
                                    int(self.sample_rate * self.psd_inverse_length),
                                    trunc_method='hann')
+            fseries *= psd
             fseries.psd = psd
             self.segments[delta_f] = fseries
             
