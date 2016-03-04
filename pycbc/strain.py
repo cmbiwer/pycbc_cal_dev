@@ -19,7 +19,7 @@ This modules contains functions reading, generating, and segmenting strain data
 import copy
 import logging, numpy, lal
 import pycbc.noise
-from pycbc.types import float32
+from pycbc.types import float32, TimeSeries, zeros
 from pycbc.types import Array, FrequencySeries, complex_same_precision_as
 from pycbc.types import MultiDetOptionAppendAction, MultiDetOptionAction
 from pycbc.types import MultiDetOptionActionSpecial
@@ -33,7 +33,9 @@ from pycbc.filter.zpk import filter_zpk
 import pycbc.psd
 import pycbc.fft
 import pycbc.events
-
+import pycbc.frame
+import pycbc.filter
+from scipy.signal import kaiserord
 
 def detect_loud_glitches(strain, psd_duration=4., psd_stride=2.,
                          psd_avg_method='median', low_freq_cutoff=30.,
@@ -985,3 +987,102 @@ class StrainSegments(object):
     def verify_segment_options_multi_ifo(cls, opt, parser, ifos):
         for ifo in ifos:
             required_opts_multi_ifo(opt, parser, ifo, cls.required_opts_list)
+
+class StrainBuffer(pycbc.frame.DataBuffer):
+    def __init__(self, frame_src, channel_name, start_time,
+                       max_buffer=512,
+                       sample_rate=4096,
+                       highpass_frequency=15.0,
+                       highpass_reduction=200.0,
+                       highpass_bandwidth=5.0,
+                       psd_samples=30,
+                       psd_segment_length=4,
+                       psd_inverse_length=3.5,
+                       dyn_range_fac=pycbc.DYN_RANGE_FAC,
+                 ):
+        """ Class to produce overwhitened strain incrementally
+        """ 
+        super(StrainBuffer, self).__init__(frame_src, channel_name, start_time, max_buffer)
+        self.highpass_frequency = highpass_frequency
+        self.highpass_reduction = highpass_reduction
+        self.highpass_bandwidth = highpass_bandwidth
+        self.sample_rate = sample_rate
+        self.dyn_range_fac = dyn_range_fac
+
+        self.psd_segment_length = psd_segment_length
+        self.psd_samples = psd_samples
+        self.psd_inverse_length = psd_inverse_length
+        self.psd = None
+
+        strain_len = int(sample_rate * self.raw_buffer.delta_t * len(self.raw_buffer))
+        self.strain = TimeSeries(zeros(strain_len, dtype=numpy.float32),
+                                 delta_t=1.0/self.sample_rate, 
+                                 epoch=start_time-max_buffer)
+
+        highpass_samples, self.beta = kaiserord(self.highpass_reduction, 
+          self.highpass_bandwidth / self.raw_buffer.sample_rate * 2 * numpy.pi)
+        self.highpass_samples =  int(highpass_samples / 2)
+        resample_corruption = 10 # If using the ldas method
+        self.factor = int(1.0 / self.raw_buffer.delta_t / self.sample_rate)
+        self.corruption = self.highpass_samples / self.factor + resample_corruption
+
+        self.sample_corr = self.corruption + self.psd_inverse_length * self.sample_rate
+        self.segments = {}
+
+    def recalculate_psd(self):
+        """ Recalculate the psd 
+        """
+        seg_len = self.sample_rate * self.psd_segment_length
+        e = len(self.strain) - self.corruption
+        s = e - ((self.psd_samples + 1) * self.psd_segment_length / 2) * self.sample_rate
+        self.psd = pycbc.psd.welch(self.strain[s:e], seg_len=seg_len, 
+                                                     seg_stride=seg_len / 2)           
+
+    def overwhitened_data(self, delta_f):
+        """ Return overwhitened data
+        """
+        if delta_f not in self.segments:
+            buffer_length = int(1.0 / delta_f)
+            e = len(self.strain) - self.corruption
+            s = e - buffer_length * self.sample_rate
+            fseries = make_frequency_series(self.strain[s:e])
+        
+            if self.psd is None:
+                self.recalculate_psd()
+
+            psd = pycbc.psd.interpolate(self.psd, delta_f)
+            psd = pycbc.psd.inverse_spectrum_truncation(psd, 
+                                   int(self.sample_rate * self.psd_inverse_length),
+                                   trunc_method='hann')
+            fseries.psd = psd
+            self.segments[delta_f] = fseries
+            
+        stilde = self.segments[delta_f]
+        return stilde
+       
+    def advance(self, blocksize):
+        """ Prepare another segment of data
+        """
+        self.segments = {}
+
+        ts = super(StrainBuffer, self).advance(blocksize)
+
+        # only condition with the needed raw data so we can continuously add
+        # to the existing result
+
+        ###### Precondition
+        sample_step = int(blocksize * self.sample_rate)
+        csize = sample_step + self.corruption * 2
+        start = len(self.raw_buffer) - csize * self.factor
+        strain = self.raw_buffer[start:]
+        strain =  pycbc.filter.highpass_fir(strain, self.highpass_frequency,
+                                       self.highpass_samples,
+                                       beta=self.beta)
+        strain = (strain * self.dyn_range_fac).astype(numpy.float32)
+        
+        strain = pycbc.filter.resample_to_delta_t(strain, 1.0/self.sample_rate, method='ldas')
+
+        ###### Stitch into continuous stream
+        self.strain.roll(-sample_step)
+        self.strain[len(self.strain) - csize + self.corruption:] = strain[self.corruption:]
+        self.strain.start_time += blocksize
