@@ -1034,7 +1034,7 @@ class StrainBuffer(pycbc.frame.DataBuffer):
         """ Recalculate the psd 
         """
         seg_len = self.sample_rate * self.psd_segment_length
-        e = len(self.strain) - self.corruption
+        e = len(self.strain)
         s = e - ((self.psd_samples + 1) * self.psd_segment_length / 2) * self.sample_rate
         self.psd = pycbc.psd.welch(self.strain[s:e], seg_len=seg_len, 
                                                      seg_stride=seg_len / 2)           
@@ -1044,7 +1044,7 @@ class StrainBuffer(pycbc.frame.DataBuffer):
         """
         if delta_f not in self.segments:
             buffer_length = int(1.0 / delta_f)
-            e = len(self.strain) - self.corruption
+            e = len(self.strain)
             s = e - buffer_length * self.sample_rate
             fseries = make_frequency_series(self.strain[s:e])
         
@@ -1055,7 +1055,7 @@ class StrainBuffer(pycbc.frame.DataBuffer):
             psd = pycbc.psd.inverse_spectrum_truncation(psd, 
                                    int(self.sample_rate * self.psd_inverse_length),
                                    trunc_method='hann')
-            fseries *= psd
+            fseries /= psd
             fseries.psd = psd
             self.segments[delta_f] = fseries
             
