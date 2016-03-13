@@ -25,6 +25,7 @@ parser.add_argument('--highpass-reduction', type=float,
                         help="DB to reduce low frequencies")
 parser.add_argument('--highpass-bandwidth', type=float,
                         help="Width of the highpass turnover region in Hz")
+parser.add_argument('--psd-recalculate-every', type=int, default=1)
 parser.add_argument('--psd-samples', type=int, 
                         help="Number of PSD segments to use in the rolling estimate")
 parser.add_argument('--psd-segment-length', type=int, 
@@ -101,7 +102,9 @@ with ctx:
         logging.info('Conditioning Data')
         for ifo in ifos:
             data_reader[ifo].advance(valid_pad)
-            #data_reader[ifo].recalculate_psd()     
+
+            if i % args.psd_recalculate_every == 0:
+                data_reader[ifo].recalculate_psd()     
  
         logging.info('Start Filtering')
         for i, htilde in enumerate(waveforms):
