@@ -1013,6 +1013,7 @@ class StrainBuffer(pycbc.frame.DataBuffer):
         self.psd_samples = psd_samples
         self.psd_inverse_length = psd_inverse_length
         self.psd = None
+        self.psds = {}
 
         strain_len = int(sample_rate * self.raw_buffer.delta_t * len(self.raw_buffer))
         self.strain = TimeSeries(zeros(strain_len, dtype=numpy.float32),
@@ -1037,7 +1038,8 @@ class StrainBuffer(pycbc.frame.DataBuffer):
         e = len(self.strain)
         s = e - ((self.psd_samples + 1) * self.psd_segment_length / 2) * self.sample_rate
         self.psd = pycbc.psd.welch(self.strain[s:e], seg_len=seg_len, 
-                                                     seg_stride=seg_len / 2)           
+                                                     seg_stride=seg_len / 2) 
+        self.psds = {}          
 
     def overwhitened_data(self, delta_f):
         """ Return overwhitened data
@@ -1050,11 +1052,16 @@ class StrainBuffer(pycbc.frame.DataBuffer):
         
             if self.psd is None:
                 self.recalculate_psd()
+            
+            if delta_f not in self.psds:
+                psd = pycbc.psd.interpolate(self.psd, delta_f)
+                psd = pycbc.psd.inverse_spectrum_truncation(psd, 
+                                       int(self.sample_rate * self.psd_inverse_length),
+                                       trunc_method='hann')
+                self.psds[delta_f] = psd
 
-            psd = pycbc.psd.interpolate(self.psd, delta_f)
-            psd = pycbc.psd.inverse_spectrum_truncation(psd, 
-                                   int(self.sample_rate * self.psd_inverse_length),
-                                   trunc_method='hann')
+            psd = self.psds[delta_f]                
+
             fseries /= psd
             fseries.psd = psd
             self.segments[delta_f] = fseries

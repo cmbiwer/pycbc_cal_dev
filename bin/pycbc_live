@@ -14,7 +14,8 @@ parser.add_argument('--bank-file', help="Template bank xml file")
 parser.add_argument('--low-frequency-cutoff', help="low frequency cutoff", type=int)
 parser.add_argument('--sample-rate', help="output sample rate", type=int)
 parser.add_argument('--chisq-bins', help="Number of chisq bins")
-parser.add_argument('--analysis-chunk', help="Amount of data to produce triggers in a  block", type=int)
+parser.add_argument('--analysis-chunk', type=int,
+                        help="Amount of data to produce triggers in a  block")
 parser.add_argument('--snr-threshold', type=float)
 parser.add_argument('--channel-name', action=MultiDetOptionAction, nargs='+')
 parser.add_argument('--frame-src', action=MultiDetOptionAction, nargs='+')
@@ -100,7 +101,7 @@ with ctx:
         logging.info('Conditioning Data')
         for ifo in ifos:
             data_reader[ifo].advance(valid_pad)
-            data_reader[ifo].recalculate_psd()     
+            #data_reader[ifo].recalculate_psd()     
  
         logging.info('Start Filtering')
         for i, htilde in enumerate(waveforms):
@@ -133,7 +134,6 @@ with ctx:
                 snrv = numpy.array([out[bl][l]])
                 chisq, dof = power_chisq.values(cout[bl], snrv, norm, psd, [l], htilde)
                 chisq /= dof
-                print snrv * norm, chisq
 
             # Calculate coincidences
         logging.info('End Filtering')
