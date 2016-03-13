@@ -18,6 +18,18 @@ parser.add_argument('--analysis-chunk', help="Amount of data to produce triggers
 parser.add_argument('--snr-threshold', type=float)
 parser.add_argument('--channel-name', action=MultiDetOptionAction, nargs='+')
 parser.add_argument('--frame-src', action=MultiDetOptionAction, nargs='+')
+parser.add_argument('--highpass-frequency', type=float,
+                        help="Frequency to apply highpass filtering")
+parser.add_argument('--highpass-reduction', type=float,
+                        help="DB to reduce low frequencies")
+parser.add_argument('--highpass-bandwidth', type=float,
+                        help="Width of the highpass turnover region in Hz")
+parser.add_argument('--psd-samples', type=int, 
+                        help="Number of PSD segments to use in the rolling estimate")
+parser.add_argument('--psd-segment-length', type=int, 
+                        help="Length in seconds of each PSD segment")
+parser.add_argument('--psd-inverse-length', type=float, 
+                        help="Lenght in time for the equivelant FIR filter")
 parser.add_argument('--start-time', type=int, default=0)
 
 parser.add_argument('--approximant')
@@ -33,11 +45,12 @@ sr = args.sample_rate
 flow = args.low_frequency_cutoff
 
 
-psd_pad = 4
-valid_pad = args.analysis_chunk
-total_pad = psd_pad * 2 + valid_pad
 
-bank = waveform.LiveFilterBank(args.bank_file, flow, sr, total_pad, approximant=args.approximant)
+# Approximant guess of the total padding
+valid_pad = args.analysis_chunk
+total_pad = args.psd_segment_length * 2 + valid_pad
+bank = waveform.LiveFilterBank(args.bank_file, flow, sr, total_pad,
+                               approximant=args.approximant)
 
 waveforms = list(bank)
 lengths = numpy.array([1.0 / waveform.delta_f for waveform in waveforms])
@@ -47,10 +60,16 @@ ifos = args.channel_name.keys()
 data_reader = {}
 for ifo in ifos:
     data_reader[ifo] = pycbc.strain.StrainBuffer([args.frame_src[ifo]], 
-                                    '%s:%s' % (ifo, args.channel_name[ifo]),
-                                    args.start_time, 
-                                    max_buffer=lengths.max(),
-                                    sample_rate=args.sample_rate)
+                        '%s:%s' % (ifo, args.channel_name[ifo]),
+                        args.start_time, 
+                        max_buffer=lengths.max(),
+                        sample_rate=args.sample_rate,
+                        highpass_frequency=args.highpass_frequency,
+                        highpass_reduction=args.highpass_reduction,
+                        highpass_bandwidth=args.highpass_bandwidth,
+                        psd_samples=args.psd_samples,
+                        psd_segment_length=args.psd_segment_length,
+                        psd_inverse_length=args.psd_inverse_length)
 
 out = {}
 cout = {}
@@ -92,23 +111,28 @@ with ctx:
                 stilde = data_reader[ifo].overwhitened_data(htilde.delta_f)
                 psd = stilde.psd    
 
+                # Matched Filter
                 norm = 4.0 * htilde.delta_f / (htilde.sigmasq(psd) ** 0.5)
                 correlate(htilde, stilde, cout[bl][0:len(stilde)])
                 ifft(cout[bl], out[bl])
                 cout[bl].fill(0)
 
                 # Find peaks
-                olen = len(out[bl])
-                m, l = out[bl][olen - sr * (total_pad):olen - sr * psd_pad].abs_max_loc()
+                valid_end = len(out[bl]) - data_reader[ifo].total_corruption
+                valid_start = valid_end - valid_pad * args.sample_rate
+                seg = slice(valid_start, valid_end)
+
+                m, l = out[bl][seg].abs_max_loc()
+                l += valid_start
 
                 # If nothing is above threshold we can exit this template
                 if m * norm < args.snr_threshold:
                     continue
 
                 # calculate chisq
-                idx = olen - total_pad * sr + l
-                snrv = numpy.array([out[bl][idx]])
-                chisq, dof = power_chisq.values(cout[bl], snrv, norm, psd, [idx], htilde)
+                
+                snrv = numpy.array([out[bl][l]])
+                chisq, dof = power_chisq.values(cout[bl], snrv, norm, psd, [l], htilde)
                 chisq /= dof
                 #print snrv * norm, chisq
 
@@ -122,10 +146,3 @@ with ctx:
 
 pr.disable()
 pr.dump_stats('log')
-
-
-#print lengths.mean()
-#print lengths.min()
-#print lengths.max()
-#print lengths.sum() * sr / 1024 / 1024 * 4
-#print "LATENCY MIN", 4 + psd_pad + valid_pad
