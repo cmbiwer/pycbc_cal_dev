@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 import multiprocessing, argparse, numpy, pycbc, logging, cProfile
 from pycbc import version, waveform, types, filter as pfilter, scheme, psd as pypsd, noise, vetoes
+from pycbc.types import MultiDetOptionAction
 
 from pycbc.fft import ifft
 from pycbc.filter import correlate
+from pycbc import strain
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--verbose', action='store_true')
@@ -12,23 +14,14 @@ parser.add_argument('--bank-file', help="Template bank xml file")
 parser.add_argument('--low-frequency-cutoff', help="low frequency cutoff", type=int)
 parser.add_argument('--sample-rate', help="output sample rate", type=int)
 parser.add_argument('--chisq-bins', help="Number of chisq bins")
-parser.add_argument('--analysis-chunk', help="Amount of data to produce triggers ina  block", type=int)
+parser.add_argument('--analysis-chunk', help="Amount of data to produce triggers in a  block", type=int)
 parser.add_argument('--snr-threshold', type=float)
+parser.add_argument('--channel-name', action=MultiDetOptionAction, nargs='+')
+parser.add_argument('--frame-src', action=MultiDetOptionAction, nargs='+')
+parser.add_argument('--start-time', type=int, default=0)
+
 parser.add_argument('--approximant')
 scheme.insert_processing_option_group(parser)
-
-class DataExtractor(object):
-    def __init__(self, buffer_sizes, chunksize=4):
-        self.sbuffer = types.zeros(int(max(buffer_sizes)), dtype=numpy.float32)
-
-    def update_data(self):
-        pass
-
-    def psd(self, delta_f):
-        pass
-
-    def strain(self, delta_f):
-        pass
 
 args = parser.parse_args()
 scheme.verify_processing_options(args, parser)
@@ -42,39 +35,31 @@ flow = args.low_frequency_cutoff
 
 psd_pad = 4
 valid_pad = args.analysis_chunk
-total_pad = psd_pad + valid_pad
+total_pad = psd_pad * 2 + valid_pad
 
 bank = waveform.LiveFilterBank(args.bank_file, flow, sr, total_pad, approximant=args.approximant)
 
 waveforms = list(bank)
 lengths = numpy.array([1.0 / waveform.delta_f for waveform in waveforms])
 
-data = {}
+ifos = args.channel_name.keys()
+
+data_reader = {}
+for ifo in ifos:
+    data_reader[ifo] = pycbc.strain.StrainBuffer([args.frame_src[ifo]], 
+                                    '%s:%s' % (ifo, args.channel_name[ifo]),
+                                    args.start_time, 
+                                    max_buffer=lengths.max(),
+                                    sample_rate=args.sample_rate)
+
 out = {}
 cout = {}
-psd = {}
-j = 0
 for bl in set(lengths):
-    j += 1
     bl = int(bl)
     df = 1.0 / bl
     tlen = bl * sr
-    flen = tlen / 2 + 1
-    psd[bl] = (pypsd.aLIGOZeroDetHighPower(flen, df, flow) * pycbc.DYN_RANGE_FAC ** 2.0).astype(numpy.float32)
-
-    for ifo in ["H1", "L1"]:
-        if ifo not in data:
-            data[ifo] = {}
-        data[ifo][bl] = noise.frequency_noise_from_psd(psd[bl], seed=j).astype(numpy.complex64)
-        data[ifo][bl][flow / df:] /= psd[bl][flow / df:]
-
-    print abs(data[ifo][bl]).min(), abs(data[ifo][bl]).max()
-
     out[bl] = types.zeros(tlen, dtype=numpy.complex64)   
     cout[bl] = out[bl] * 1
-
-start_time = 0
-data_ext = DataExtractor(lengths, chunksize=valid_pad)
 
 pr = cProfile.Profile()
 pr.enable()
@@ -83,35 +68,52 @@ pr.enable()
 
 power_chisq = vetoes.SingleDetPowerChisq(args.chisq_bins, None)
 
-#process segment of data
+
 with ctx:
-    logging.info('Start Filtering')
-    for i, htilde in enumerate(waveforms):
+    # prime pump for testing
+    for i in range(35):
+        for ifo in ifos:
+            data_reader[ifo].advance(valid_pad)
+    for ifo in ifos:
+        data_reader[ifo].recalculate_psd()
 
-        for ifo in ["H1", "L1"]:
-            bl = int(1.0 / htilde.delta_f)
-    
-            norm = 4.0 * htilde.delta_f / (htilde.sigmasq(psd[bl]) ** 0.5)
-            correlate(htilde, data[ifo][bl], cout[bl][0:len(data[ifo][bl])])
-            ifft(cout[bl], out[bl])
+    for i in range(10):
+        logging.info('Conditioning Data')
+        for ifo in ifos:
+            data_reader[ifo].advance(valid_pad)
+            data_reader[ifo].recalculate_psd()     
+ 
+        logging.info('Start Filtering')
+        for i, htilde in enumerate(waveforms):
 
-            # Find peaks
-            olen = len(out[bl])
-            m, l = out[bl][olen - sr * (total_pad):olen - sr * psd_pad].abs_max_loc()
+            for ifo in ifos:
+                bl = int(1.0 / htilde.delta_f)
+        
+                stilde = data_reader[ifo].overwhitened_data(htilde.delta_f)
+                psd = stilde.psd    
 
-            # If nothing is above threshold we can exit this template
-            if m * norm < args.snr_threshold:
-                continue
+                norm = 4.0 * htilde.delta_f / (htilde.sigmasq(psd) ** 0.5)
+                correlate(htilde, stilde, cout[bl][0:len(stilde)])
+                ifft(cout[bl], out[bl])
+                cout[bl].fill(0)
 
-            # calculate chisq
-            idx = olen - total_pad * sr + l
-            snrv = numpy.array([out[bl][idx]])
-            chisq, dof = power_chisq.values(cout[bl], snrv, norm, psd[bl], [idx], htilde)
-            chisq /= dof
-            print snrv * norm, chisq
+                # Find peaks
+                olen = len(out[bl])
+                m, l = out[bl][olen - sr * (total_pad):olen - sr * psd_pad].abs_max_loc()
 
-        # Calculate coincidences
-    logging.info('End Filtering')
+                # If nothing is above threshold we can exit this template
+                if m * norm < args.snr_threshold:
+                    continue
+
+                # calculate chisq
+                idx = olen - total_pad * sr + l
+                snrv = numpy.array([out[bl][idx]])
+                chisq, dof = power_chisq.values(cout[bl], snrv, norm, psd, [idx], htilde)
+                chisq /= dof
+                #print snrv * norm, chisq
+
+            # Calculate coincidences
+        logging.info('End Filtering')
 
 # cluster coincs over bank, calculate FAR
 
@@ -122,8 +124,8 @@ pr.disable()
 pr.dump_stats('log')
 
 
-print lengths.mean()
-print lengths.min()
-print lengths.max()
-print lengths.sum() * sr / 1024 / 1024 * 4
-print "LATENCY MIN", 4 + psd_pad + valid_pad
+#print lengths.mean()
+#print lengths.min()
+#print lengths.max()
+#print lengths.sum() * sr / 1024 / 1024 * 4
+#print "LATENCY MIN", 4 + psd_pad + valid_pad
