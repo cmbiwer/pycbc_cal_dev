@@ -107,6 +107,7 @@ with ctx:
 
             for ifo in ifos:
                 bl = int(1.0 / htilde.delta_f)
+                
         
                 stilde = data_reader[ifo].overwhitened_data(htilde.delta_f)
                 psd = stilde.psd    
@@ -115,11 +116,10 @@ with ctx:
                 norm = 4.0 * htilde.delta_f / (htilde.sigmasq(psd) ** 0.5)
                 correlate(htilde, stilde, cout[bl][0:len(stilde)])
                 ifft(cout[bl], out[bl])
-                cout[bl].fill(0)
 
                 # Find peaks
                 valid_end = len(out[bl]) - data_reader[ifo].total_corruption
-                valid_start = valid_end - valid_pad * args.sample_rate
+                valid_start = int(valid_end - valid_pad * args.sample_rate)
                 seg = slice(valid_start, valid_end)
 
                 m, l = out[bl][seg].abs_max_loc()
@@ -130,11 +130,10 @@ with ctx:
                     continue
 
                 # calculate chisq
-                
                 snrv = numpy.array([out[bl][l]])
                 chisq, dof = power_chisq.values(cout[bl], snrv, norm, psd, [l], htilde)
                 chisq /= dof
-                #print snrv * norm, chisq
+                print snrv * norm, chisq
 
             # Calculate coincidences
         logging.info('End Filtering')
