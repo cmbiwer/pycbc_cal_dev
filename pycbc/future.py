@@ -30,51 +30,6 @@ Mostly done with monkey-patching.
 # Add in missing numpy functionality
 import numpy
 
-def unique(ar, return_index=False, return_inverse=False):
-    """
-        KILL ME!!!!
-    """
-    import numpy as np
-    try:
-        ar = ar.flatten()
-    except AttributeError:
-        if not return_inverse and not return_index:
-            return np.sort(list(set(ar)))
-        else:
-            ar = np.asanyarray(ar).flatten()
-
-    if ar.size == 0:
-        if return_inverse and return_index:
-            return ar, np.empty(0, np.bool), np.empty(0, np.bool)
-        elif return_inverse or return_index:
-            return ar, np.empty(0, np.bool)
-        else:
-            return ar
-
-    if return_inverse or return_index:
-        if return_index:
-            perm = ar.argsort(kind='mergesort')
-        else:
-            perm = ar.argsort()
-        aux = ar[perm]
-        flag = np.concatenate(([True], aux[1:] != aux[:-1]))
-        if return_inverse:
-            iflag = np.cumsum(flag) - 1
-            iperm = perm.argsort()
-            if return_index:
-                return aux[flag], perm[flag], iflag[iperm]
-            else:
-                return aux[flag], iflag[iperm]
-        else:
-            return aux[flag], perm[flag]
-
-    else:
-        ar.sort()
-        flag = np.concatenate(([True], ar[1:] != ar[:-1]))
-        return ar[flag]
-
-numpy.unique = unique
-
 def in1d(ar1, ar2, assume_unique=False, invert=False):
     """Stolen from numpy, please kill me and upgrade numpy....
     """
