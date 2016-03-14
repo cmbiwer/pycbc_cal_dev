@@ -152,7 +152,6 @@ def _get_desc(fftobj):
 
     # If we are performing a batched transform:
     if fftobj.nbatch > 1:
-        print fftobj.nbatch, type(fftobj.nbatch)
         status = lib.DftiSetValue(desc, DFTI_NUMBER_OF_TRANSFORMS, fftobj.nbatch)
         check_status(status)
         status = lib.DftiSetValue(desc, DFTI_INPUT_DISTANCE, fftobj.idist)
