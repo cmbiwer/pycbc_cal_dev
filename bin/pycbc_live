@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import multiprocessing, argparse, numpy, pycbc, logging, cProfile
 from pycbc import version, waveform, types, filter as pfilter, scheme, psd as pypsd, noise, vetoes
-from pycbc.types import MultiDetOptionAction
+from pycbc.types import MultiDetOptionAction, zeros
 
 from pycbc.fft import ifft
 from pycbc.filter import correlate
@@ -46,8 +46,6 @@ ctx = scheme.from_cli(args)
 sr = args.sample_rate
 flow = args.low_frequency_cutoff
 
-
-
 # Approximant guess of the total padding
 valid_pad = args.analysis_chunk
 total_pad = args.psd_segment_length * 2 + valid_pad
@@ -73,14 +71,107 @@ for ifo in ifos:
                         psd_segment_length=args.psd_segment_length,
                         psd_inverse_length=args.psd_inverse_length)
 
-out = {}
-cout = {}
-for bl in set(lengths):
-    bl = int(bl)
-    df = 1.0 / bl
-    tlen = bl * sr
-    out[bl] = types.zeros(tlen, dtype=numpy.complex64)   
-    cout[bl] = out[bl] * 1
+class BatchMatchedFilter(object):
+    def __init__(self, templates, maxelements=2**23):
+        durations = numpy.array([1.0 / t.delta_f for t in templates])
+
+        lsort = durations.argsort()
+        durations = durations[lsort]
+        templates = [templates[li] for li in lsort]
+
+        # Figure out how to chunk together the templates into groups to process
+        sizes, counts = numpy.unique(durations, return_counts=True)
+        print counts
+        tsamples = [(len(t) - 1) * 2 for t in templates]
+        grabs = maxelements / numpy.unique(tsamples) 
+
+        chunks = numpy.array([])
+        num = 0
+        for count, grab in zip(counts, grabs):
+            chunks = numpy.append(chunks, numpy.arange(num, count + num, grab))
+            chunks = numpy.append(chunks, [count + num])
+            num += count
+        chunks = numpy.unique(chunks).astype(numpy.uint32)
+
+        # We now have how many templates to grab at a time.
+        self.chunks = chunks[1:] - chunks[0:-1]
+
+        self.out_mem = {}
+        self.cout_mem = {}
+        chunk_durations = [durations[i] for i in chunks[:-1]]
+        self.chunk_tsamples = [tsamples[int(i)] for i in chunks[:-1]]
+        samples = self.chunk_tsamples * self.chunks
+ 
+        # Create workspace memory for correlate and snr      
+        mem_ids = [(a, b) for a, b in zip(chunk_durations, self.chunks)]
+        mem_types = set(zip(mem_ids, samples))
+
+        self.tgroups, self.mids = [], []
+        for i, size in mem_types:
+            self.out_mem[i] = zeros(size, dtype=numpy.complex64)
+            self.cout_mem[i] = zeros(size, dtype=numpy.complex64)
+
+        # Split the templates into their processing groups
+        for dur, count in mem_ids:
+            tgroup = templates[0:count]
+            self.tgroups.append(tgroup)
+            self.mids.append((dur, count))
+            templates = templates[count:]
+
+    def set_data(self, data):
+        self.data = data
+        self.block_id = 0
+
+    def process_batch(self):
+        if self.block_id == len(self.tgroups):
+            return None
+
+        print numpy.array([len(t) for t in self.tgroups]).sum()
+
+        tgroup = self.tgroups[self.block_id]
+        psize = self.chunk_tsamples[self.block_id]
+        mid = self.mids[self.block_id]
+
+        s = 0
+        e = psize
+
+        for htilde in tgroup:
+            stilde = self.data.overwhitened_data(htilde.delta_f)
+            psd = stilde.psd   
+
+            out = self.out_mem[mid][s:e]
+            cout = self.cout_mem[mid][s:e]
+
+            # Matched Filter
+            norm = 4.0 * htilde.delta_f / (htilde.sigmasq(psd) ** 0.5)
+            correlate(htilde, stilde, cout[0:len(stilde)])
+            ifft(cout, out)
+
+            # Find peaks
+            valid_end = len(out) - data_reader[ifo].total_corruption
+            valid_start = int(valid_end - valid_pad * args.sample_rate)
+            seg = slice(valid_start, valid_end)
+
+            m, l = out[seg].abs_max_loc()
+            l += valid_start
+
+            # If nothing is above threshold we can exit this template
+            if m * norm < args.snr_threshold:
+                continue    
+     
+            # calculate chisq
+            snrv = numpy.array([out[l]])
+            chisq, dof = power_chisq.values(cout, snrv, norm, psd, [l], htilde)
+            chisq /= dof
+
+            s += psize
+            e += psize
+
+        self.block_id += 1
+        return True
+
+
+mf = BatchMatchedFilter(waveforms)
 
 pr = cProfile.Profile()
 pr.enable()
@@ -106,40 +197,13 @@ with ctx:
             if i % args.psd_recalculate_every == 0:
                 data_reader[ifo].recalculate_psd()     
  
-        logging.info('Start Filtering')
-        for i, htilde in enumerate(waveforms):
+            mf.set_data(data_reader[ifo])
+            
+            logging.info('Start Filtering: %s' % ifo)
+            while mf.process_batch() is not None:
+                pass
 
-            for ifo in ifos:
-                bl = int(1.0 / htilde.delta_f)
-                
-        
-                stilde = data_reader[ifo].overwhitened_data(htilde.delta_f)
-                psd = stilde.psd    
-
-                # Matched Filter
-                norm = 4.0 * htilde.delta_f / (htilde.sigmasq(psd) ** 0.5)
-                correlate(htilde, stilde, cout[bl][0:len(stilde)])
-                ifft(cout[bl], out[bl])
-
-                # Find peaks
-                valid_end = len(out[bl]) - data_reader[ifo].total_corruption
-                valid_start = int(valid_end - valid_pad * args.sample_rate)
-                seg = slice(valid_start, valid_end)
-
-                m, l = out[bl][seg].abs_max_loc()
-                l += valid_start
-
-                # If nothing is above threshold we can exit this template
-                if m * norm < args.snr_threshold:
-                    continue
-
-                # calculate chisq
-                snrv = numpy.array([out[bl][l]])
-                chisq, dof = power_chisq.values(cout[bl], snrv, norm, psd, [l], htilde)
-                chisq /= dof
-
-            # Calculate coincidences
-        logging.info('End Filtering')
+            logging.info('End Filtering')
 
 # cluster coincs over bank, calculate FAR
 
