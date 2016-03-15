@@ -972,11 +972,15 @@ class LiveBatchMatchedFilter(object):
 
         snr = numpy.zeros(len(tgroup), dtype=numpy.complex64)
         chisq = numpy.zeros(len(tgroup), dtype=numpy.float32)
+        time = numpy.zeros(len(tgroup), dtype=numpy.float64)
+        dof = numpy.zeros(len(tgroup), dtype=numpy.float64)
 
         i = 0
         for htilde in tgroup:
             # Find peaks
             m, l = htilde.out[seg].abs_max_loc()
+            time[i] = self.data.start_time + l / self.data.sample_rate            
+
             l += valid_start
 
             # If nothing is above threshold we can exit this template
@@ -986,14 +990,20 @@ class LiveBatchMatchedFilter(object):
      
             # calculate chisq
             snrv = numpy.array([htilde.out[l]])
-            chisq[i], dof = self.power_chisq.values(htilde.cout, snrv, norm, psd, [l], htilde)
+            chisq[i], dof[i] = self.power_chisq.values(htilde.cout, snrv, norm, psd, [l], htilde)
 
-            chisq[i] /= dof
+            chisq[i] /= dof[i]
             snr[i] = snrv[0] * norm
             i += 1
-          
+        
+        result = {}
+        result['snr'] = snr[0:i]
+        result['chisq'] = chisq[0:i]
+        result['chisq_dof'] = dof[0:i]
+        result['end_time'] = time[0:i]
+
         self.block_id += 1
-        return snr[0:i], chisq[0:i]       
+        return result     
 
 __all__ = ['match', 'matched_filter', 'sigmasq', 'sigma', 'get_cutoff_indices',
            'sigmasq_series', 'make_frequency_series', 'overlap', 'overlap_cplx',

@@ -89,22 +89,16 @@ with ctx:
         logging.info('Conditioning Data')
         for ifo in ifos:
             data_reader[ifo].advance(valid_pad)
-            
-            print data_reader[ifo].start_time
-            if i % args.psd_recalculate_every == 0:
-                data_reader[ifo].recalculate_psd()     
- 
             mf.set_data(data_reader[ifo])
             
+            # decide if we should recalculate the psd by now
+            if i % args.psd_recalculate_every == 0:
+                data_reader[ifo].recalculate_psd()     
+        
             logging.info('Filtering: %s' % ifo)
         
             while 1:
                 result = mf.process_batch()     
                 if result is None: break
-                
-                s, c = result
 
-# cluster coincs over bank, calculate FAR
-
-# send report if above threshold
 pr.dump_stats('log')
