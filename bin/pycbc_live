@@ -34,6 +34,7 @@ parser.add_argument('--psd-segment-length', type=int,
 parser.add_argument('--psd-inverse-length', type=float, 
                         help="Lenght in time for the equivelant FIR filter")
 parser.add_argument('--start-time', type=int, default=0)
+parser.add_argument('--end-time', type=int, default=numpy.inf)
 parser.add_argument('--approximant')
 scheme.insert_processing_option_group(parser)
 
@@ -160,14 +161,10 @@ class BatchMatchedFilter(object):
         snr = numpy.zeros(len(tgroup), dtype=numpy.complex64)
         chisq = numpy.zeros(len(tgroup), dtype=numpy.float32)
 
-        for i, htilde in enumerate(tgroup):
+        i = 0
+        for htilde in tgroup:
             # Find peaks
             m, l = htilde.out[seg].abs_max_loc()
-            #m, l = pycbc.events.threshold_and_cluster(htilde.out[seg],
-            #                     args.snr_threshold,
-            #                     len(htilde.out[seg]))
-
-            #exit()            
             l += valid_start
 
             # If nothing is above threshold we can exit this template
@@ -181,10 +178,10 @@ class BatchMatchedFilter(object):
 
             chisq[i] /= dof
             snr[i] = snrv[0] * norm
-            
+            i += 1
+          
         self.block_id += 1
-        return snr, chisq
-
+        return snr[0:i], chisq[0:i]
 
 # get more data
 power_chisq = vetoes.SingleDetPowerChisq(args.chisq_bins, None)
@@ -202,8 +199,7 @@ with ctx:
     pr = cProfile.Profile()
     pr.enable()
 
-    #while 1:
-    for i in range(20):
+    while data_reader[data_reader.keys()[0]].end_time < args.end_time:
         logging.info('Conditioning Data')
         for ifo in ifos:
             data_reader[ifo].advance(valid_pad)
@@ -221,13 +217,7 @@ with ctx:
                 
                 s, c = result
 
-pr.dump_stats('log')       
-
-
 # cluster coincs over bank, calculate FAR
 
 # send report if above threshold
-
-
-pr.disable()
 pr.dump_stats('log')
