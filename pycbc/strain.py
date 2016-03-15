@@ -1031,6 +1031,10 @@ class StrainBuffer(pycbc.frame.DataBuffer):
         self.total_corruption = self.corruption + self.psd_corruption
         self.segments = {}
 
+    @property
+    def end_time(self):
+        return float(self.strain.start_time + (len(self.strain) - self.total_corruption) / self.sample_rate)
+
     def recalculate_psd(self):
         """ Recalculate the psd 
         """
