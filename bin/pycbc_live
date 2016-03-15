@@ -3,9 +3,10 @@ import multiprocessing, argparse, numpy, pycbc, logging, cProfile
 from pycbc import version, waveform, types, filter as pfilter, scheme, psd as pypsd, noise, vetoes
 from pycbc.types import MultiDetOptionAction, zeros
 
-from pycbc.fft import ifft
+from pycbc.fft import ifft, IFFT
 from pycbc.filter import correlate
 from pycbc import strain
+import pycbc.events
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--verbose', action='store_true')
@@ -33,7 +34,6 @@ parser.add_argument('--psd-segment-length', type=int,
 parser.add_argument('--psd-inverse-length', type=float, 
                         help="Lenght in time for the equivelant FIR filter")
 parser.add_argument('--start-time', type=int, default=0)
-
 parser.add_argument('--approximant')
 scheme.insert_processing_option_group(parser)
 
@@ -72,7 +72,7 @@ for ifo in ifos:
                         psd_inverse_length=args.psd_inverse_length)
 
 class BatchMatchedFilter(object):
-    def __init__(self, templates, maxelements=2**23):
+    def __init__(self, templates, maxelements=2**22):
         durations = numpy.array([1.0 / t.delta_f for t in templates])
 
         lsort = durations.argsort()
@@ -81,7 +81,6 @@ class BatchMatchedFilter(object):
 
         # Figure out how to chunk together the templates into groups to process
         sizes, counts = numpy.unique(durations, return_counts=True)
-        print counts
         tsamples = [(len(t) - 1) * 2 for t in templates]
         grabs = maxelements / numpy.unique(tsamples) 
 
@@ -98,6 +97,7 @@ class BatchMatchedFilter(object):
 
         self.out_mem = {}
         self.cout_mem = {}
+        self.ifts = {}
         chunk_durations = [durations[i] for i in chunks[:-1]]
         self.chunk_tsamples = [tsamples[int(i)] for i in chunks[:-1]]
         samples = self.chunk_tsamples * self.chunks
@@ -108,8 +108,12 @@ class BatchMatchedFilter(object):
 
         self.tgroups, self.mids = [], []
         for i, size in mem_types:
+            dur, count = i
             self.out_mem[i] = zeros(size, dtype=numpy.complex64)
             self.cout_mem[i] = zeros(size, dtype=numpy.complex64)
+            self.ifts[i] = IFFT(self.cout_mem[i], self.out_mem[i],
+                                nbatch=count,
+                                size=len(self.cout_mem[i]) / count)
 
         # Split the templates into their processing groups
         for dur, count in mem_ids:
@@ -118,70 +122,76 @@ class BatchMatchedFilter(object):
             self.mids.append((dur, count))
             templates = templates[count:]
 
+        # Associate the snr and corr memory block to each template
+        for i, tgroup in enumerate(self.tgroups):
+            psize = self.chunk_tsamples[i]
+            s = 0
+            e = psize
+            mid = self.mids[i]
+            for htilde in tgroup:
+                htilde.out = self.out_mem[mid][s:e]
+                htilde.cout = self.cout_mem[mid][s:e]
+                s += psize
+                e += psize
+
     def set_data(self, data):
         self.data = data
         self.block_id = 0
 
-    def process_batch(self):
+    def process_batch(self):       
         if self.block_id == len(self.tgroups):
             return None
-
-        print numpy.array([len(t) for t in self.tgroups]).sum()
 
         tgroup = self.tgroups[self.block_id]
         psize = self.chunk_tsamples[self.block_id]
         mid = self.mids[self.block_id]
+        stilde = self.data.overwhitened_data(tgroup[0].delta_f)
+        psd = stilde.psd 
 
-        s = 0
-        e = psize
+        valid_end = psize - self.data.total_corruption
+        valid_start = int(valid_end - valid_pad * args.sample_rate)
+        seg = slice(valid_start, valid_end)
 
         for htilde in tgroup:
-            stilde = self.data.overwhitened_data(htilde.delta_f)
-            psd = stilde.psd   
+            correlate(htilde, stilde, htilde.cout[0:len(stilde)])
 
-            out = self.out_mem[mid][s:e]
-            cout = self.cout_mem[mid][s:e]
+        self.ifts[mid].execute()
 
-            # Matched Filter
-            norm = 4.0 * htilde.delta_f / (htilde.sigmasq(psd) ** 0.5)
-            correlate(htilde, stilde, cout[0:len(stilde)])
-            ifft(cout, out)
+        snr = numpy.zeros(len(tgroup), dtype=numpy.complex64)
+        chisq = numpy.zeros(len(tgroup), dtype=numpy.float32)
 
+        for i, htilde in enumerate(tgroup):
             # Find peaks
-            valid_end = len(out) - data_reader[ifo].total_corruption
-            valid_start = int(valid_end - valid_pad * args.sample_rate)
-            seg = slice(valid_start, valid_end)
+            m, l = htilde.out[seg].abs_max_loc()
+            #m, l = pycbc.events.threshold_and_cluster(htilde.out[seg],
+            #                     args.snr_threshold,
+            #                     len(htilde.out[seg]))
 
-            m, l = out[seg].abs_max_loc()
+            #exit()            
             l += valid_start
 
             # If nothing is above threshold we can exit this template
+            norm = 4.0 * htilde.delta_f / (htilde.sigmasq(psd) ** 0.5)
             if m * norm < args.snr_threshold:
                 continue    
      
             # calculate chisq
-            snrv = numpy.array([out[l]])
-            chisq, dof = power_chisq.values(cout, snrv, norm, psd, [l], htilde)
-            chisq /= dof
+            snrv = numpy.array([htilde.out[l]])
+            chisq[i], dof = power_chisq.values(htilde.cout, snrv, norm, psd, [l], htilde)
 
-            s += psize
-            e += psize
-
+            chisq[i] /= dof
+            snr[i] = snrv[0] * norm
+            
         self.block_id += 1
-        return True
+        return snr, chisq
 
-
-mf = BatchMatchedFilter(waveforms)
-
-pr = cProfile.Profile()
-pr.enable()
 
 # get more data
-
 power_chisq = vetoes.SingleDetPowerChisq(args.chisq_bins, None)
 
-
 with ctx:
+    mf = BatchMatchedFilter(waveforms)
+
     # prime pump for testing
     for i in range(35):
         for ifo in ifos:
@@ -189,7 +199,11 @@ with ctx:
     for ifo in ifos:
         data_reader[ifo].recalculate_psd()
 
-    for i in range(10):
+    pr = cProfile.Profile()
+    pr.enable()
+
+    #while 1:
+    for i in range(20):
         logging.info('Conditioning Data')
         for ifo in ifos:
             data_reader[ifo].advance(valid_pad)
@@ -199,11 +213,16 @@ with ctx:
  
             mf.set_data(data_reader[ifo])
             
-            logging.info('Start Filtering: %s' % ifo)
-            while mf.process_batch() is not None:
-                pass
+            logging.info('Filtering: %s' % ifo)
+        
+            while 1:
+                result = mf.process_batch()     
+                if result is None: break
+                
+                s, c = result
 
-            logging.info('End Filtering')
+pr.dump_stats('log')       
+
 
 # cluster coincs over bank, calculate FAR
 
