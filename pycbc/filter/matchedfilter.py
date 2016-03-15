@@ -878,9 +878,124 @@ def quadratic_interpolate_peak(left, middle, right):
     bin_offset = 1.0/2.0 * (left - right) / (left - 2 * middle + right)
     peak_value = middle + 0.25 * (left - right) * bin_offset
     return bin_offset, peak_value
-        
+
+class LiveBatchMatchedFilter(object):
+    def __init__(self, templates, snr_threshold, chisq_bins, maxelements=2**22):
+        self.snr_threshold = snr_threshold
+
+        from pycbc import vetoes
+        self.power_chisq = vetoes.SingleDetPowerChisq(chisq_bins, None)
+
+        durations = numpy.array([1.0 / t.delta_f for t in templates])
+
+        lsort = durations.argsort()
+        durations = durations[lsort]
+        templates = [templates[li] for li in lsort]
+
+        # Figure out how to chunk together the templates into groups to process
+        sizes, counts = numpy.unique(durations, return_counts=True)
+        tsamples = [(len(t) - 1) * 2 for t in templates]
+        grabs = maxelements / numpy.unique(tsamples) 
+
+        chunks = numpy.array([])
+        num = 0
+        for count, grab in zip(counts, grabs):
+            chunks = numpy.append(chunks, numpy.arange(num, count + num, grab))
+            chunks = numpy.append(chunks, [count + num])
+            num += count
+        chunks = numpy.unique(chunks).astype(numpy.uint32)
+
+        # We now have how many templates to grab at a time.
+        self.chunks = chunks[1:] - chunks[0:-1]
+
+        self.out_mem = {}
+        self.cout_mem = {}
+        self.ifts = {}
+        chunk_durations = [durations[i] for i in chunks[:-1]]
+        self.chunk_tsamples = [tsamples[int(i)] for i in chunks[:-1]]
+        samples = self.chunk_tsamples * self.chunks
+ 
+        # Create workspace memory for correlate and snr      
+        mem_ids = [(a, b) for a, b in zip(chunk_durations, self.chunks)]
+        mem_types = set(zip(mem_ids, samples))
+
+        self.tgroups, self.mids = [], []
+        for i, size in mem_types:
+            dur, count = i
+            self.out_mem[i] = zeros(size, dtype=numpy.complex64)
+            self.cout_mem[i] = zeros(size, dtype=numpy.complex64)
+            self.ifts[i] = IFFT(self.cout_mem[i], self.out_mem[i],
+                                nbatch=count,
+                                size=len(self.cout_mem[i]) / count)
+
+        # Split the templates into their processing groups
+        for dur, count in mem_ids:
+            tgroup = templates[0:count]
+            self.tgroups.append(tgroup)
+            self.mids.append((dur, count))
+            templates = templates[count:]
+
+        # Associate the snr and corr memory block to each template
+        for i, tgroup in enumerate(self.tgroups):
+            psize = self.chunk_tsamples[i]
+            s = 0
+            e = psize
+            mid = self.mids[i]
+            for htilde in tgroup:
+                htilde.out = self.out_mem[mid][s:e]
+                htilde.cout = self.cout_mem[mid][s:e]
+                s += psize
+                e += psize
+
+    def set_data(self, data):
+        self.data = data
+        self.block_id = 0
+
+    def process_batch(self):       
+        if self.block_id == len(self.tgroups):
+            return None
+
+        tgroup = self.tgroups[self.block_id]
+        psize = self.chunk_tsamples[self.block_id]
+        mid = self.mids[self.block_id]
+        stilde = self.data.overwhitened_data(tgroup[0].delta_f)
+        psd = stilde.psd 
+
+        valid_end = psize - self.data.total_corruption
+        valid_start = int(valid_end - self.data.blocksize * self.data.sample_rate)
+        seg = slice(valid_start, valid_end)
+
+        for htilde in tgroup:
+            correlate(htilde, stilde, htilde.cout[0:len(stilde)])
+
+        self.ifts[mid].execute()
+
+        snr = numpy.zeros(len(tgroup), dtype=numpy.complex64)
+        chisq = numpy.zeros(len(tgroup), dtype=numpy.float32)
+
+        i = 0
+        for htilde in tgroup:
+            # Find peaks
+            m, l = htilde.out[seg].abs_max_loc()
+            l += valid_start
+
+            # If nothing is above threshold we can exit this template
+            norm = 4.0 * htilde.delta_f / (htilde.sigmasq(psd) ** 0.5)
+            if m * norm < self.snr_threshold:
+                continue    
+     
+            # calculate chisq
+            snrv = numpy.array([htilde.out[l]])
+            chisq[i], dof = self.power_chisq.values(htilde.cout, snrv, norm, psd, [l], htilde)
+
+            chisq[i] /= dof
+            snr[i] = snrv[0] * norm
+            i += 1
+          
+        self.block_id += 1
+        return snr[0:i], chisq[0:i]       
 
 __all__ = ['match', 'matched_filter', 'sigmasq', 'sigma', 'get_cutoff_indices',
            'sigmasq_series', 'make_frequency_series', 'overlap', 'overlap_cplx',
-           'matched_filter_core', 'correlate', 'MatchedFilterControl']
+           'matched_filter_core', 'correlate', 'MatchedFilterControl', 'LiveBatchMatchedFilter']
 

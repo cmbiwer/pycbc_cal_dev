@@ -1032,6 +1032,10 @@ class StrainBuffer(pycbc.frame.DataBuffer):
         self.segments = {}
 
     @property
+    def start_time(self):
+        return self.end_time - self.blocksize
+
+    @property
     def end_time(self):
         return float(self.strain.start_time + (len(self.strain) - self.total_corruption) / self.sample_rate)
 
@@ -1077,6 +1081,7 @@ class StrainBuffer(pycbc.frame.DataBuffer):
         """ Prepare another segment of data
         """
         self.segments = {}
+        self.blocksize = blocksize
 
         ts = super(StrainBuffer, self).advance(blocksize)
 
