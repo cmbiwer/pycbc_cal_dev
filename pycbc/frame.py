@@ -149,8 +149,8 @@ def read_frame(location, channels, start_time=None,
    
     if check_integrity:     
         stream.mode = lalframe.FR_STREAM_VERBOSE_MODE
-        lalframe.FrSetMode(stream.mode | lalframe.FR_STREAM_CHECKSUM_MODE,
-                       stream)
+#        lalframe.FrSetMode(stream.mode | lalframe.FR_STREAM_CHECKSUM_MODE,
+#                       stream)
 
     # determine duration of data
     if type(channels) is list:
@@ -405,11 +405,13 @@ class DataBuffer(object):
                                      epoch=start_time - max_buffer,
                                      delta_t=1.0/self.sample_rate)
 
-    def update_cache(self):
+    def update_cache(self, frame_src=None):
         """ Reset the lal cache. This can be used to update the cache if the 
         result may change due to more files being added to the filesystem, 
         for example.
         """
+        if frame_src:
+            self.frame_src = frame_src
         cache = locations_to_cache(self.frame_src)
         stream = lalframe.FrStreamCacheOpen(cache)
         self.stream = stream
