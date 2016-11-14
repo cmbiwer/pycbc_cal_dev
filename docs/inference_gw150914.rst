@@ -52,6 +52,7 @@ See the appendix on how to plot posterior.
 ===================
 
 ```
+
 ; example configuration file for pycbc_inference GW150914 example
 ; values here are hardcoded for a simple example
 ; note options can be changed using --config-overrides with pycbc_inference
@@ -130,6 +131,7 @@ name = uniform_sky
 [prior-polarization]
 ; prior for polarization angle
 name = uniform_angle
+
 ```
 
 ===================
