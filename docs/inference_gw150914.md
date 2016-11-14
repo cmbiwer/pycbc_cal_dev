@@ -238,7 +238,7 @@ In order to use kombine (https://github.com/bfarr/kombine) remove the
 ``--ntemps`` option and change to ``--samplers kombine``. You can remove
 ``--skip-burn-in`` with kombine if you want to use kombine's internal test.
 
-In general I've fond the ``emcee_pt`` sampler to be more precision though less
+In general I've found the ``emcee_pt`` sampler to be more precision though less
 accurate than the other two. That's something I'm looking at now.
 
 ===================
