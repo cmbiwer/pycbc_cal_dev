@@ -305,5 +305,11 @@ plot only the 2399th iteration.
 You can use the ``--thin-start``, ``--thin-interval``, and ``--thin-end`` options
 to pick out every i-th sample between a start and an end.
 
+Try changing ``--iteration`` from 5, 100, 1000, 2000, 3000, 5000, 5999. You can see
+how the posteriors evolve as you run the sampler.
+
 Other plotting executables for samples, autocorrelation length, etc. all start with
-``pycbc_inference_plot_*`` if you have pycbc installed.
+``pycbc_inference_plot_*`` if you have pycbc installed. For example:
+
+``pycbc_inference_plot_samples`` : plots all the chains of samples
+``pycbc_inference_plot_acl`` : histograms estimates of the autocorrelation lengths for each chain
