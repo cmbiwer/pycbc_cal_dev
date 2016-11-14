@@ -28,6 +28,13 @@ Copy the ``inference.ini`` section below into a file named ``inference.ini``.
 
 Copy the ``run_pycbc_inference.sh`` section below into a file named ``run_pycbc_inference.sh``.
 
+Run:
+```
+sh run_pycbc_inference.sh
+```
+
+See the appendix on these page for a simple condor example.
+
 ===================
 ``inference.ini``
 ===================
