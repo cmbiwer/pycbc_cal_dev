@@ -43,7 +43,7 @@ Run:
 sh run_pycbc_inference.sh
 ```
 
-See the appendix on this page for a simple condor example.
+See the appendix on this page for a simple condor submission example for this script.
 
 See the appendix on how to plot posterior.
 
