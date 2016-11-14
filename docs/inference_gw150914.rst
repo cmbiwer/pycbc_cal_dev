@@ -17,8 +17,17 @@ and the effective spin parameter is ~-0.07.
 
 Note that there are a few difference between this example and the analysis in
 the paper. For example, here we use a low-frequency cutoff of 30Hz instead
-of 20Hz. Also LALInference has more features, eg. a bucket of
-different jump proposals, PSD fitting, and calibration marginalization.
+of 20Hz, and using only 4 seconds of data instead of 8 seconds. Also LALInference
+has more features, eg. a bucket of different jump proposals, PSD fitting, and
+calibration marginalization to keep in mind when comparing.
+
+To increase the number of independent samples use more walkers and iterations.
+Remember if you're not using a burn-in option with ``pycbc_inference``, you'll
+want to discard some of the samples at the start (about a couple autocorrelation
+lengths).
+
+Within a couple hundred samples you'll see structure in the posteriors, and they'll
+slowly "move" as the sampler continues.
 
 ===================
 Instructions
@@ -29,15 +38,19 @@ Copy the ``inference.ini`` section below into a file named ``inference.ini``.
 Copy the ``run_pycbc_inference.sh`` section below into a file named ``run_pycbc_inference.sh``.
 
 Run:
+
 ```
 sh run_pycbc_inference.sh
 ```
 
-See the appendix on these page for a simple condor example.
+See the appendix on this page for a simple condor example.
+
+See the appendix on how to plot posterior.
 
 ===================
 ``inference.ini``
 ===================
+
 ```
 ; example configuration file for pycbc_inference GW150914 example
 ; values here are hardcoded for a simple example
@@ -122,6 +135,7 @@ name = uniform_angle
 ===================
 ``run_pycbc_inference.sh``
 ===================
+
 ```
 #! /bin/bash
 # example of how to run pycbc_inference on GW150914
@@ -251,3 +265,37 @@ Remember to:
 ```
 chmod +x run_pycbc_inference.sh
 ```
+
+
+===================
+Appendix: Plot posterior
+===================
+
+There is an executable already written to plot the posterior named
+``pycbc_inference_plot_posterior``.
+
+Example of how to use it is:
+
+```
+#! /bin/bash
+
+HTML_DIR=${HOME}/public_html/inference_example/gw150914
+mkdir -p ${HTML_DIR}
+
+INPUT_FILE=gw150914_example_emcee_pt.hdf
+
+pycbc_inference_plot_posterior --input-file ${INPUT_FILE} \
+    --output-file ${HTML_DIR}/posterior.png \
+    --hide-contours --hide-density \
+    --quantiles 0.05 .5 0.95 \
+    --iteration 2399
+```
+
+Here we plot the 90% credible interval (the quantiles option), and choose to
+plot only the 2399th iteration.
+
+You can use the ``--thin-start``, ``--thin-interval``, and ``--thin-end`` options
+to pick out every i-th sample between a start and an end.
+
+Other plotting executables for samples, autocorrelation length, etc. all start with
+``pycbc_inference_plot_*`` if you have pycbc installed.
