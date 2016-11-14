@@ -33,6 +33,9 @@ slowly "move" as the sampler continues.
 Instructions
 ===================
 
+The general setup is you have a configuration file that contains the information about the priors.
+And you then run ``pycbc_inference`` with this.
+
 Copy the ``inference.ini`` section below into a file named ``inference.ini``.
 
 Copy the ``run_pycbc_inference.sh`` section below into a file named ``run_pycbc_inference.sh``.
