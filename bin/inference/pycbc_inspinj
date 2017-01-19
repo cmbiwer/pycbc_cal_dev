@@ -43,6 +43,8 @@ parser.add_argument("--seed", type=int, default=0,
                     help="Random seed.")
 parser.add_argument("--instruments", type=str, nargs="+", required=True,
                     help="IFOs, eg. H1 L1.")
+parser.add_argument("--ninjections", type=int, default=0,
+                    help="Number of injections to draw parameters.")
 
 # add config options
 parser.add_argument("--config-files", type=str, nargs="+", required=True,
@@ -97,7 +99,7 @@ if not any(param in tags for param in variable_args):
 # get parameters that do not change in sampler
 static_args = dict([(key, cp.get_opt_tags("static_args", key, []))
                     for key in cp.options("static_args")])
-for key,val in static_args.iteritems():
+for key, val in static_args.iteritems():
     try:
         static_args[key] = float(val)
         continue
@@ -112,7 +114,15 @@ for key,val in static_args.iteritems():
 logging.info("Setting up priors for each parameter")
 dists = inference.read_distributions_from_config(cp, "prior")
 
-print dists
+# draw samples
+logging.info("Drawing samples")
+samples = {}
+for dist in dists:
+    dist_samples = dist.rvs(size=opts.ninjections)
+    for param in dist.params:
+        samples[param] = dist_samples[param]
+
+print samples
 
 # exit
 logging.info("Done")
