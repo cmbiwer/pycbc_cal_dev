@@ -185,15 +185,29 @@ for i in range(opts.ninjections):
     # get SimInspiral and set simulation_id
     sim = empty_sim_inspiral(i)
 
-    # add value if it was a Distribution
+    # add value if it was in a Distribution
     for key in samples.keys():
         if hasattr(sim, key):
             setattr(sim, key, samples[key][i])
         else:
             logging.info("Ignored %s", key)
 
+    # timing columns
+
+    # mass columns
+
+    # SNR scaling
+
     # append to SimInspiralTable
     sim_table.append(sim)
+
+    # add static columns
+    for key, val in static_args.iteritems():
+        if hasattr(sim, key):
+            setattr(sim, key, val)
+        else:
+            logging.info("Ignored %s", key)
+
 
 # write XML file
 logging.info("Writing file")
