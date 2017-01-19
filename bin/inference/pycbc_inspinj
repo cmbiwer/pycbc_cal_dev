@@ -25,13 +25,21 @@ import pycbc
 from pycbc import inference
 from pycbc.workflow import WorkflowConfigParser
 
+import glue
+from glue.ligolw import ilwd
+from glue.ligolw import ligolw
+from glue.ligolw import lsctables
+from glue.ligolw import utils
+from pycbc.types import optparse
+import sys
+
 def convert_liststring_to_list(lstring):
     """ Checks if an argument of the configuration file is a string of a list
     and returns the corresponding list (of strings)
     """
-    if lstring[0]=='[' and lstring[-1]==']':
-        lvalue = [str(lstring[1:-1].split(',')[n].strip().strip("'"))
-                      for n in range(len(lstring[1:-1].split(',')))]
+    if lstring[0] == "[" and lstring[-1] == "]":
+        lvalue = [str(lstring[1:-1].split(",")[n].strip().strip("'"))
+                      for n in range(len(lstring[1:-1].split(",")))]
     return lvalue
 
 # command line usage
@@ -79,7 +87,7 @@ pycbc.init_logging(opts.verbose)
 
 # set the seed
 numpy.random.seed(opts.seed)
-logging.info("Using seed %i" %(opts.seed))
+logging.info("Using seed %i", opts.seed)
 
 # read configuration file
 logging.info("Reading configuration file")
@@ -123,6 +131,89 @@ for dist in dists:
         samples[param] = dist_samples[param]
 
 print samples
+
+def empty_sim_inspiral(i):
+    """ Return empty SimInspiral.
+
+    Returns
+    --------
+    lsctables.SimInspiral
+        The "empty" SimInspiral object.
+    """
+    sim = lsctables.SimInspiral()
+    cols = lsctables.SimInspiralTable.validcolumns
+    for entry in cols.keys():
+        if cols[entry] in ["real_4","real_8"]:
+            setattr(sim,entry,0.)
+        elif cols[entry] == "int_4s":
+            setattr(sim,entry,0)
+        elif cols[entry] == "lstring":
+            setattr(sim,entry,"")
+        elif entry == "process_id":
+            sim.process_id = ilwd.ilwdchar("process:process_id:0")
+        elif entry == "simulation_id":
+            sim.simulation_id = ilwd.ilwdchar(
+                                           "sim_inspiral:simulation_id:%d" % i)
+        else:
+            raise ValueError("Column %s not recognized" %(entry) )
+    return sim
+
+# create output XML file
+logging.info('Creating XML file')
+outdoc = ligolw.Document()
+outdoc.appendChild(ligolw.LIGO_LW())
+
+# put opts into a dict for the process table
+opts_dict = optparse.convert_to_process_params_dict(opts)
+
+# create process table
+proc_id = utils.process.register_to_xmldoc(
+                    outdoc, sys.argv[0], opts_dict,
+                    comment="", ifos=["".join(opts.instruments)],
+                    version=glue.git_version.id,
+                    cvs_repository=glue.git_version.branch,
+                    cvs_entry_time=glue.git_version.date).process_id
+
+# create SimInspiral table
+sim_table = lsctables.New(lsctables.SimInspiralTable,
+                          columns=lsctables.SimInspiralTable.validcolumns)
+outdoc.childNodes[0].appendChild(sim_table)
+
+# loop over injections
+for i in range(opts.ninjections):
+
+    # get SimInspiral and set simulation_id
+    sim = empty_sim_inspiral(i)
+
+    # add value if it was a Distribution
+    for key in samples.keys():
+        if hasattr(sim, key):
+            setattr(sim, key, samples[key][i])
+        else:
+            logging.info("Ignored %s", key)
+
+    # append to SimInspiralTable
+    sim_table.append(sim)
+
+# write XML file
+logging.info("Writing file")
+utils.write_filename(outdoc, opts.output_file,
+                     gz=opts.output_file.endswith('gz'))
+
+# SimInspiral
+# 'alpha', 'alpha1', 'alpha2', 'alpha3', 'alpha4', 'alpha5', 'alpha6',
+# 'amp_order', 'bandpass', 'beta',
+# 'coa_phase', 'distance',
+# 'eff_dist_g', 'eff_dist_h', 'eff_dist_l', 'eff_dist_t', 'eff_dist_v',
+# 'end_time_gmst', 'eta', 'f_final', 'f_lower',
+# 'g_end_time', 'g_end_time_ns', 'geocent_end_time', 'geocent_end_time_ns',
+# 'h_end_time', 'h_end_time_ns',
+# 'inclination', 'l_end_time', 'l_end_time_ns', 'latitude', 'longitude',
+# 'mass1', 'mass2', 'mchirp', 'numrel_data', 'numrel_mode_max',
+# 'numrel_mode_min', 'phi0', 'polarization', 'process_id', 'psi0', 'psi3',
+# 'set_time_geocent', 'simulation_id', 'source', 'spin1x', 'spin1y',
+# 'spin1z', 'spin2x', 'spin2y', 'spin2z', 't_end_time', 't_end_time_ns',
+# 'taper', 'theta0', 'v_end_time', 'v_end_time_ns', 'waveform'
 
 # exit
 logging.info("Done")
