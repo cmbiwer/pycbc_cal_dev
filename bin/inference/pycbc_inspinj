@@ -95,8 +95,8 @@ if not any(param in tags for param in variable_args):
     raise KeyError("You are missing a priors section in the config file.")
 
 # get parameters that do not change in sampler
-static_args = dict([(key,cp.get_opt_tags("static_args",key,[])) \
-                                     for key in cp.options("static_args")])
+static_args = dict([(key, cp.get_opt_tags("static_args", key, []))
+                    for key in cp.options("static_args")])
 for key,val in static_args.iteritems():
     try:
         static_args[key] = float(val)
@@ -110,21 +110,9 @@ for key,val in static_args.iteritems():
 
 # get prior distribution for each variable parameter
 logging.info("Setting up priors for each parameter")
-distributions = inference.read_distributions_from_config(cp, "prior")
+dists = inference.read_distributions_from_config(cp, "prior")
 
-# get distribution to draw from for each walker initial position
-logging.info("Setting walkers initial conditions for varying parameters")
-
-# check if user wants to use different distributions than prior for setting
-# walkers initial positions
-if len(cp.get_subsections("initial")):
-    initial_distributions = inference.read_distributions_from_config(cp,
-        section="initial")
-else:
-    initial_distributions = inference.read_distributions_from_config(cp,
-        section="prior")
-
-print initial_distributions
+print dists
 
 # exit
 logging.info("Done")
