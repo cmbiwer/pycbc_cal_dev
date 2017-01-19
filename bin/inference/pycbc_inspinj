@@ -1,0 +1,130 @@
+#! /usr/bin/env python
+# Copyright (C) 2017 Christopher M. Biwer
+#
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+# option) any later version.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General
+# Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+"""Draws from distributions.
+"""
+
+import os
+import argparse
+import logging
+import numpy
+import pycbc
+from pycbc import inference
+from pycbc.workflow import WorkflowConfigParser
+
+def convert_liststring_to_list(lstring):
+    """ Checks if an argument of the configuration file is a string of a list
+    and returns the corresponding list (of strings)
+    """
+    if lstring[0]=='[' and lstring[-1]==']':
+        lvalue = [str(lstring[1:-1].split(',')[n].strip().strip("'"))
+                      for n in range(len(lstring[1:-1].split(',')))]
+    return lvalue
+
+# command line usage
+parser = argparse.ArgumentParser(usage=__file__ + " [--options]",
+                                 description=__doc__)
+
+# add data options
+parser.add_argument("--seed", type=int, default=0,
+                    help="Random seed.")
+parser.add_argument("--instruments", type=str, nargs="+", required=True,
+                    help="IFOs, eg. H1 L1.")
+
+# add config options
+parser.add_argument("--config-files", type=str, nargs="+", required=True,
+                    help="A file parsable by "
+                         "pycbc.workflow.WorkflowConfigParser.")
+parser.add_argument("--config-overrides", type=str, nargs="+", default=None,
+                    metavar="SECTION:OPTION:VALUE",
+                    help="List of section:option:value combinations to add "
+                         "into the configuration file.")
+
+# output options
+parser.add_argument("--output-file", type=str, required=True,
+                    help="Output file path.")
+parser.add_argument("--force", action="store_true", default=False,
+                    help="If the output-file already exists, overwrite it. "
+                         "Otherwise, an OSError is raised.")
+ 
+# verbose option
+parser.add_argument("--verbose", action="store_true", default=False,
+                    help="Print logging messages.")
+
+# parse command line
+opts = parser.parse_args()
+
+# check for the output file
+if os.path.exists(opts.output_file) and not opts.force:
+    raise OSError("output-file already exists; use --force if you wish to "
+                  "overwrite it.")
+
+# setup log
+pycbc.init_logging(opts.verbose)
+
+# set the seed
+numpy.random.seed(opts.seed)
+logging.info("Using seed %i" %(opts.seed))
+
+# read configuration file
+logging.info("Reading configuration file")
+if opts.config_overrides is not None:
+    overrides = [override.split(":") for override in opts.config_overrides]
+else:
+    overrides = None
+cp = WorkflowConfigParser(opts.config_files, overrides)
+
+# sanity check that each parameter in [variable_args] has a priors section
+variable_args = cp.options("variable_args")
+subsections = cp.get_subsections("prior")
+tags = numpy.concatenate([tag.split("+") for tag in subsections])
+if not any(param in tags for param in variable_args):
+    raise KeyError("You are missing a priors section in the config file.")
+
+# get parameters that do not change in sampler
+static_args = dict([(key,cp.get_opt_tags("static_args",key,[])) \
+                                     for key in cp.options("static_args")])
+for key,val in static_args.iteritems():
+    try:
+        static_args[key] = float(val)
+        continue
+    except:
+        pass
+    try:
+        static_args[key] = convert_liststring_to_list(val) 
+    except:
+        pass
+
+# get prior distribution for each variable parameter
+logging.info("Setting up priors for each parameter")
+distributions = inference.read_distributions_from_config(cp, "prior")
+
+# get distribution to draw from for each walker initial position
+logging.info("Setting walkers initial conditions for varying parameters")
+
+# check if user wants to use different distributions than prior for setting
+# walkers initial positions
+if len(cp.get_subsections("initial")):
+    initial_distributions = inference.read_distributions_from_config(cp,
+        section="initial")
+else:
+    initial_distributions = inference.read_distributions_from_config(cp,
+        section="prior")
+
+print initial_distributions
+
+# exit
+logging.info("Done")
