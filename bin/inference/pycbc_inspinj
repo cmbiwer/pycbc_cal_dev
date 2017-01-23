@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU General Public License along
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-"""Draws from distributions.
+""" Draws from distributions.
 """
 
 import os
@@ -22,16 +22,11 @@ import argparse
 import logging
 import numpy
 import pycbc
+from pycbc import detector
 from pycbc import inference
+from pycbc.filter import sigmasq
+from pycbc.io import sim_xml
 from pycbc.workflow import WorkflowConfigParser
-
-import glue
-from glue.ligolw import ilwd
-from glue.ligolw import ligolw
-from glue.ligolw import lsctables
-from glue.ligolw import utils
-from pycbc.types import optparse
-import sys
 
 def convert_liststring_to_list(lstring):
     """ Checks if an argument of the configuration file is a string of a list
@@ -41,6 +36,30 @@ def convert_liststring_to_list(lstring):
         lvalue = [str(lstring[1:-1].split(",")[n].strip().strip("'"))
                       for n in range(len(lstring[1:-1].split(",")))]
     return lvalue
+
+def pad_timeseries_to_integer_length(timeseries, sample_rate):
+    """ This function zero pads a time series so that its length is an integer
+    multiple of the sampling rate.
+
+    Padding is adding symmetically to the start and end of the time series.
+    If the number of samples to pad is odd then the end zero padding will have
+    one more sample than the start zero padding.
+    """
+
+    # calculate how many sample points needed to pad to get
+    # integer second time series
+    remainder = sample_rate - len(timeseries) % sample_rate
+    start_pad = int(remainder / 2)
+    end_pad = int(remainder - start_pad)
+
+    # make arrays of zeroes
+    start_array = numpy.zeros(start_pad)
+    end_array = numpy.zeros(end_pad)
+
+    # pad waveform with arrays of zeroes
+    initial_array = numpy.concatenate([start_array,timeseries,end_array])
+    return TimeSeries(initial_array, delta_t=timeseries.delta_t,
+                      epoch=timeseries.start_time, dtype=timeseries.dtype)
 
 # command line usage
 parser = argparse.ArgumentParser(usage=__file__ + " [--options]",
@@ -123,6 +142,7 @@ logging.info("Setting up priors for each parameter")
 dists = inference.read_distributions_from_config(cp, "prior")
 
 # draw samples
+#! FIXME: could probably just use dist_samples instead of casting it as dict
 logging.info("Drawing samples")
 samples = {}
 for dist in dists:
@@ -130,51 +150,12 @@ for dist in dists:
     for param in dist.params:
         samples[param] = dist_samples[param]
 
-print samples
+# get Detector for each IFO
+dets = dict([(ifo, detector.Detector(ifo)) for ifo in opts.instruments])
 
-def empty_sim_inspiral(i):
-    """ Return empty SimInspiral.
-
-    Returns
-    --------
-    lsctables.SimInspiral
-        The "empty" SimInspiral object.
-    """
-    sim = lsctables.SimInspiral()
-    cols = lsctables.SimInspiralTable.validcolumns
-    for entry in cols.keys():
-        if cols[entry] in ["real_4","real_8"]:
-            setattr(sim,entry,0.)
-        elif cols[entry] == "int_4s":
-            setattr(sim,entry,0)
-        elif cols[entry] == "lstring":
-            setattr(sim,entry,"")
-        elif entry == "process_id":
-            sim.process_id = ilwd.ilwdchar("process:process_id:0")
-        elif entry == "simulation_id":
-            sim.simulation_id = ilwd.ilwdchar(
-                                           "sim_inspiral:simulation_id:%d" % i)
-        else:
-            raise ValueError("Column %s not recognized" %(entry) )
-    return sim
-
-# create output XML file
-logging.info('Creating XML file')
-outdoc = ligolw.Document()
-outdoc.appendChild(ligolw.LIGO_LW())
-
-# put opts into a dict for the process table
-opts_dict = optparse.convert_to_process_params_dict(opts)
-
-# create process table
-proc_id = utils.process.register_to_xmldoc(
-                    outdoc, sys.argv[0], opts_dict,
-                    comment="", ifos=["".join(opts.instruments)],
-                    version=glue.git_version.id,
-                    cvs_repository=glue.git_version.branch,
-                    cvs_entry_time=glue.git_version.date).process_id
-
-# create SimInspiral table
+# create output XML file and append a SimInspiralTable
+logging.info("Creating XML file")
+outdoc = sim_xml.empty_ligolw_document(opts)
 sim_table = lsctables.New(lsctables.SimInspiralTable,
                           columns=lsctables.SimInspiralTable.validcolumns)
 outdoc.childNodes[0].appendChild(sim_table)
@@ -183,51 +164,120 @@ outdoc.childNodes[0].appendChild(sim_table)
 for i in range(opts.ninjections):
 
     # get SimInspiral and set simulation_id
-    sim = empty_sim_inspiral(i)
+    sim = sim_xml.empty_sim_inspiral(i)
 
-    # add value if it was in a Distribution
+    # fill in SimInspiral columns with variable parameters
     for key in samples.keys():
-        if hasattr(sim, key):
-            setattr(sim, key, samples[key][i])
+        sim_xml.parse_to_column(sim, key, samples[key][i])
+
+    # fill in SimInspiral columns with static parameters
+    for key, val in static_args.iteritems():
+        sim_xml.parse_to_column(sim, key, val)
+
+    # if user wants a specific network SNR then rescale the distance
+    stat_key = "network_snr"
+    if stat_key in samples.keys() or stat_key in static_args.keys():
+        if stat_key in samples.keys():
+            target_stat = samples[stat_key][i]
         else:
-            logging.info("Ignored %s", key)
+            target_stat = static_args[stat_key]
 
-    # timing columns
+        # generate waveform
+        #! FIXME: use a generator probably so does not have to be TD
+        logging.info("Generating waveform at %.3fMpc beginning at %.3fHz for "
+                     "SNR calculation", sim.distance,
+                     opts.psd_low_frequency_cutoff)
+        h_plus, h_cross = get_td_waveform(
+                                sim, approximant=name, phase_order=phase_order,
+                                f_lower=opts.psd_low_frequency_cutoff,
+                                delta_t=1.0 / sample_rate)
 
-    # mass columns
+        # zero pad to get integer second time series
+        h_plus = pad_timeseries_to_integer_length(h_plus, sample_rate)
+        h_cross = pad_timeseries_to_integer_length(h_cross, sample_rate)
 
-    # SNR scaling
+        # loop over Detectors
+        for det in dets:
+
+            # get time delay to interferometer from center of the Earth
+            time_delay = det.time_delay_from_earth_center(sim.longitude,
+                                                          sim.latitude,
+                                                          sim.geocent_end_time)
+            end_time = sim.geocent_end_time + time_delay
+
+            # get antenna pattern
+            f_plus, f_cross = det.antenna_pattern(sim.longitude, sim.latitude,
+                                                  sim.polarization,
+                                                  sim.geocent_end_time)
+
+            # calculate strain
+            logging.info("Calculating strain for %s", ifo)
+            strain = f_plus * h_plus + f_cross * h_cross
+
+            # taper waveform
+            logging.info("Tapering strain for %s", ifo)
+            strain = taper_timeseries(strain, tapermethod=sim.taper)
+
+            # FFT strain
+            logging.info("FFT strain for %s", ifo)
+            strain_tilde = make_frequency_series(strain)
+
+            # interpolate PSD to waveform delta_f
+            if psd_dict[ifo].delta_f != strain_tilde.delta_f:
+                logging.info("Interpolating PSD for %s from %fHz to %fHz",
+                             ifo, psd_dict[ifo].delta_f, strain_tilde.delta_f)
+                psd_dict[ifo] = _psd.interpolate(
+                                           psd_dict[ifo], strain_tilde.delta_f)
+
+            # calculate sigma-squared SNR
+            logging.info("Calculating sigma for %s", ifo)
+            sigma_squared = sigmasq(
+                            DYN_RANGE_FAC * strain_tilde,
+                            psd=psd_dict[ifo],
+                            low_frequency_cutoff=opts.psd_low_frequency_cutoff,
+                            high_frequency_cutoff=f_high)
+            logging.info("Sigma integrated from %.3f to %.3fHz for %s is %.3f",
+                         opts.psd_low_frequency_cutoff, f_high, ifo,
+                         numpy.sqrt(sigma_squared))
+
+            # populate IFO end time and effective distance columns
+            sim_xml.ifo_time_to_column(sim, det.ifo, end_time)
+            sim_xml.ifo_distance_to_column(sim, det.ifo, f_plus, f_cross)
+
+            # include sigma in network SNR calculation
+            network_snr += sigma_squared
+
+        # distance scaling factor to get target network SNR
+        network_snr = numpy.sqrt(network_snr)
+        scale = network_snr / opts.network_snr
+        sim.distance = scale*sim.distance
+        for ifo in opts.instruments:
+            attrname = "eff_dist_" + ifo[0].lower()
+            eff_dist = getattr(sim, attr_name)
+            setattr(sim, attr_name, scale * eff_dist)
 
     # append to SimInspiralTable
     sim_table.append(sim)
 
-    # add static columns
-    for key, val in static_args.iteritems():
-        if hasattr(sim, key):
-            setattr(sim, key, val)
-        else:
-            logging.info("Ignored %s", key)
-
-
 # write XML file
 logging.info("Writing file")
 utils.write_filename(outdoc, opts.output_file,
-                     gz=opts.output_file.endswith('gz'))
+                     gz=opts.output_file.endswith("gz"))
 
 # SimInspiral
-# 'alpha', 'alpha1', 'alpha2', 'alpha3', 'alpha4', 'alpha5', 'alpha6',
-# 'amp_order', 'bandpass', 'beta',
-# 'coa_phase', 'distance',
-# 'eff_dist_g', 'eff_dist_h', 'eff_dist_l', 'eff_dist_t', 'eff_dist_v',
-# 'end_time_gmst', 'eta', 'f_final', 'f_lower',
-# 'g_end_time', 'g_end_time_ns', 'geocent_end_time', 'geocent_end_time_ns',
-# 'h_end_time', 'h_end_time_ns',
-# 'inclination', 'l_end_time', 'l_end_time_ns', 'latitude', 'longitude',
-# 'mass1', 'mass2', 'mchirp', 'numrel_data', 'numrel_mode_max',
-# 'numrel_mode_min', 'phi0', 'polarization', 'process_id', 'psi0', 'psi3',
-# 'set_time_geocent', 'simulation_id', 'source', 'spin1x', 'spin1y',
-# 'spin1z', 'spin2x', 'spin2y', 'spin2z', 't_end_time', 't_end_time_ns',
-# 'taper', 'theta0', 'v_end_time', 'v_end_time_ns', 'waveform'
+# "alpha", "alpha1", "alpha2", "alpha3", "alpha4", "alpha5", "alpha6",
+# "amp_order", "bandpass", "beta",
+# "coa_phase", "distance",
+# "eff_dist_g", "eff_dist_h", "eff_dist_l", "eff_dist_t", "eff_dist_v",
+# "end_time_gmst", "eta", "f_final", "f_lower",
+# "g_end_time", "g_end_time_ns", "geocent_end_time", "geocent_end_time_ns",
+# "h_end_time", "h_end_time_ns",
+# "inclination", "l_end_time", "l_end_time_ns", "latitude", "longitude",
+# "mass1", "mass2", "mchirp", "numrel_data", "numrel_mode_max",
+# "numrel_mode_min", "phi0", "polarization", "process_id", "psi0", "psi3",
+# "set_time_geocent", "simulation_id", "source", "spin1x", "spin1y",
+# "spin1z", "spin2x", "spin2y", "spin2z", "t_end_time", "t_end_time_ns",
+# "taper", "theta0", "v_end_time", "v_end_time_ns", "waveform"
 
 # exit
 logging.info("Done")
