@@ -19,12 +19,21 @@
 
 import os
 import argparse
+from glue.ligolw import lsctables
+from glue.ligolw import utils
 import logging
 import numpy
 import pycbc
 from pycbc import detector
+from pycbc import fft
+from pycbc import filter as _filter
 from pycbc import inference
-from pycbc.filter import sigmasq
+from pycbc import inject
+from pycbc import pnutils
+from pycbc import psd as _psd
+from pycbc import strain as _strain
+from pycbc import types
+from pycbc import waveform
 from pycbc.io import sim_xml
 from pycbc.workflow import WorkflowConfigParser
 
@@ -58,8 +67,9 @@ def pad_timeseries_to_integer_length(timeseries, sample_rate):
 
     # pad waveform with arrays of zeroes
     initial_array = numpy.concatenate([start_array,timeseries,end_array])
-    return TimeSeries(initial_array, delta_t=timeseries.delta_t,
-                      epoch=timeseries.start_time, dtype=timeseries.dtype)
+    return types.TimeSeries(initial_array, delta_t=timeseries.delta_t,
+                            epoch=timeseries.start_time,
+                            dtype=timeseries.dtype)
 
 # command line usage
 parser = argparse.ArgumentParser(usage=__file__ + " [--options]",
@@ -88,18 +98,49 @@ parser.add_argument("--output-file", type=str, required=True,
 parser.add_argument("--force", action="store_true", default=False,
                     help="If the output-file already exists, overwrite it. "
                          "Otherwise, an OSError is raised.")
+
+# data conditioning options
+#! FIXME: add sanity check
+parser.add_argument("--psd-low-frequency-cutoff", type=float, default=None,
+                    help="Frequency to begin generating the PSD in Hz. This "
+                         "is the start frequency of the SNR calculation.")
+parser.add_argument("--psd-high-frequency-cutoff", type=float, default=None,
+                    help="Upper frequency to terminate the SNR "
+                         "calculation. Default will be Nyquist frequency, "
+                         "ie. int(sample_rate/2).")
  
 # verbose option
 parser.add_argument("--verbose", action="store_true", default=False,
                     help="Print logging messages.")
 
+# add option groups
+fft.insert_fft_option_group(parser)
+_strain.insert_strain_option_group_multi_ifo(parser)
+_psd.insert_psd_option_group_multi_ifo(parser)
+
 # parse command line
 opts = parser.parse_args()
+
+# verify options are sane if using strain options
+if opts.psd_estimation:
+    _strain.verify_strain_options_multi_ifo(opts, parser, opts.instruments)
+if not opts.psd_estimation and (opts.frame_files or opts.frame_type
+                            or opts.frame_cache or opts.fake_strain):
+    raise KeyError("Must use --psd-estimation with frame options"
+                   "(--frame-files, --frame-type, --frame-cache, "
+                   "and --fake-strain).")
 
 # check for the output file
 if os.path.exists(opts.output_file) and not opts.force:
     raise OSError("output-file already exists; use --force if you wish to "
                   "overwrite it.")
+
+# check that sample rates are the same
+for ifo in opts.instruments:
+    if opts.sample_rate[ifo] != opts.sample_rate[opts.instruments[0]]:
+        logging.warn('Sample rates must be equal for all IFOs.')
+        sys.exit()
+sample_rate = opts.sample_rate[opts.instruments[0]]
 
 # setup log
 pycbc.init_logging(opts.verbose)
@@ -153,12 +194,54 @@ for dist in dists:
 # get Detector for each IFO
 dets = dict([(ifo, detector.Detector(ifo)) for ifo in opts.instruments])
 
+# construct waveform string that can be parsed by LALSimulation
+if "waveform" in static_args.keys():
+    name, phase_order = inject.legacy_approximant_name(static_args["waveform"])
+else:
+    raise ValueError("Must provide waveform as static parameter")
+
 # create output XML file and append a SimInspiralTable
 logging.info("Creating XML file")
 outdoc = sim_xml.empty_ligolw_document(opts)
 sim_table = lsctables.New(lsctables.SimInspiralTable,
                           columns=lsctables.SimInspiralTable.validcolumns)
 outdoc.childNodes[0].appendChild(sim_table)
+
+# set upper frequency cutoff if not given
+if opts.psd_high_frequency_cutoff:
+    f_high = opts.psd_high_frequency_cutoff
+else:
+    f_high = int(sample_rate / 2)
+
+# get strain time series
+# strain is used to estimate a PSD so if user supplies PSD
+# then genreate a zeroNoise TimeSeries to get length, delta_f, etc.
+if not opts.psd_estimation:
+    opts.fake_strain = "zeroNoise"
+strain_dict = _strain.from_cli_multi_ifos(opts, opts.instruments,
+                                          dyn_range_fac=pycbc.DYN_RANGE_FAC)
+
+#! FIXME: only do this if rescaling SNR
+# organize options for multi-IFO PSD
+# if not generating strain then set those related options to None
+stilde_dict = {}
+length_dict = {}
+delta_f_dict = {}
+low_frequency_cutoff_dict = {}
+for ifo in opts.instruments:
+    stilde_dict[ifo] = strain_dict[ifo].to_frequencyseries()
+    length_dict[ifo] = len(stilde_dict[ifo])
+    delta_f_dict[ifo] = stilde_dict[ifo].delta_f
+    low_frequency_cutoff_dict[ifo] = opts.psd_low_frequency_cutoff
+
+# get PSD
+logging.info('Generating PSDs')
+psd_dict = _psd.from_cli_multi_ifos(
+                              opts, length_dict, delta_f_dict,
+                              low_frequency_cutoff_dict, opts.instruments,
+                              strain_dict=strain_dict,
+                              dyn_range_factor=pycbc.DYN_RANGE_FAC,
+                              precision="double")
 
 # loop over injections
 for i in range(opts.ninjections):
@@ -174,6 +257,12 @@ for i in range(opts.ninjections):
     for key, val in static_args.iteritems():
         sim_xml.parse_to_column(sim, key, val)
 
+    # add mass1 and mass2 columns
+    mchirp = static_args["mchirp"] \
+                    if "mchirp" in static_args.keys() else samples["mchirp"][i]
+    q = static_args["q"] if "q" in static_args.keys() else samples["q"][i]
+    sim.mass1, sim.mass2 = pnutils.mchirp_q_to_mass1_mass2(mchirp, q)
+
     # if user wants a specific network SNR then rescale the distance
     stat_key = "network_snr"
     if stat_key in samples.keys() or stat_key in static_args.keys():
@@ -181,13 +270,14 @@ for i in range(opts.ninjections):
             target_stat = samples[stat_key][i]
         else:
             target_stat = static_args[stat_key]
+        network_snr = 0
 
         # generate waveform
         #! FIXME: use a generator probably so does not have to be TD
         logging.info("Generating waveform at %.3fMpc beginning at %.3fHz for "
                      "SNR calculation", sim.distance,
                      opts.psd_low_frequency_cutoff)
-        h_plus, h_cross = get_td_waveform(
+        h_plus, h_cross = waveform.get_td_waveform(
                                 sim, approximant=name, phase_order=phase_order,
                                 f_lower=opts.psd_low_frequency_cutoff,
                                 delta_t=1.0 / sample_rate)
@@ -197,7 +287,7 @@ for i in range(opts.ninjections):
         h_cross = pad_timeseries_to_integer_length(h_cross, sample_rate)
 
         # loop over Detectors
-        for det in dets:
+        for ifo, det in dets.iteritems():
 
             # get time delay to interferometer from center of the Earth
             time_delay = det.time_delay_from_earth_center(sim.longitude,
@@ -216,11 +306,11 @@ for i in range(opts.ninjections):
 
             # taper waveform
             logging.info("Tapering strain for %s", ifo)
-            strain = taper_timeseries(strain, tapermethod=sim.taper)
+            strain = waveform.taper_timeseries(strain, tapermethod=sim.taper)
 
             # FFT strain
             logging.info("FFT strain for %s", ifo)
-            strain_tilde = make_frequency_series(strain)
+            strain_tilde = _filter.make_frequency_series(strain)
 
             # interpolate PSD to waveform delta_f
             if psd_dict[ifo].delta_f != strain_tilde.delta_f:
@@ -231,8 +321,8 @@ for i in range(opts.ninjections):
 
             # calculate sigma-squared SNR
             logging.info("Calculating sigma for %s", ifo)
-            sigma_squared = sigmasq(
-                            DYN_RANGE_FAC * strain_tilde,
+            sigma_squared = _filter.sigmasq(
+                            pycbc.DYN_RANGE_FAC * strain_tilde,
                             psd=psd_dict[ifo],
                             low_frequency_cutoff=opts.psd_low_frequency_cutoff,
                             high_frequency_cutoff=f_high)
@@ -241,20 +331,20 @@ for i in range(opts.ninjections):
                          numpy.sqrt(sigma_squared))
 
             # populate IFO end time and effective distance columns
-            sim_xml.ifo_time_to_column(sim, det.ifo, end_time)
-            sim_xml.ifo_distance_to_column(sim, det.ifo, f_plus, f_cross)
+            sim_xml.ifo_time_to_column(sim, ifo, end_time)
+            sim_xml.ifo_distance_to_column(sim, ifo, f_plus, f_cross)
 
             # include sigma in network SNR calculation
             network_snr += sigma_squared
 
         # distance scaling factor to get target network SNR
         network_snr = numpy.sqrt(network_snr)
-        scale = network_snr / opts.network_snr
+        scale = network_snr / target_stat
         sim.distance = scale*sim.distance
+        logging.info("Rescaled distance to %.3fMpc", sim.distance)
         for ifo in opts.instruments:
-            attrname = "eff_dist_" + ifo[0].lower()
+            attr_name = "eff_dist_" + ifo[0].lower()
             eff_dist = getattr(sim, attr_name)
-            setattr(sim, attr_name, scale * eff_dist)
 
     # append to SimInspiralTable
     sim_table.append(sim)
