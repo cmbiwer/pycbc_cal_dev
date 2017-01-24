@@ -20,6 +20,7 @@ from glue.ligolw import ilwd
 from glue.ligolw import ligolw
 from glue.ligolw import lsctables
 from glue.ligolw import utils
+import logging
 from pycbc import detector
 from pycbc.types import optparse
 import sys
@@ -67,7 +68,7 @@ def empty_ligolw_document(opts):
                         comment="", ifos=["".join(opts.instruments)],
                         version=glue.git_version.id,
                         cvs_repository=glue.git_version.branch,
-                        `cvs_entry_time=glue.git_version.date).process_id
+                        cvs_entry_time=glue.git_version.date).process_id
 
     return outdoc
 
@@ -92,16 +93,16 @@ def parse_to_column(sim, key, value):
     else:
         logging.info("Ignored %s", key)
 
-def ifo_time_to_column(sim, ifo, time):
+def ifo_time_to_column(sim, ifo, end_time):
     """ Saves the specific IFO time column.
     """
-    setattr(sim, ifo.lower() + "_end_time", int(end_time))
-    setattr(sim, ifo.lower() + "_end_time_ns", int(end_time % 1 * 1e9))
+    setattr(sim, ifo[0].lower() + "_end_time", int(end_time))
+    setattr(sim, ifo[0].lower() + "_end_time_ns", int(end_time % 1 * 1e9))
 
 def ifo_distance_to_column(sim, ifo, f_plus, f_cross):
     """ Saves the specific IFO effective distance column,
     """
     eff_distance = detector.effective_distance(sim.distance, sim.inclination,
                                                f_plus, f_cross)
-    setattr(sim, "eff_dist_" + ifo.lower(), eff_distance)
+    setattr(sim, "eff_dist_" + ifo[0].lower(), eff_distance)
 
