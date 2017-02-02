@@ -258,10 +258,27 @@ for i in range(opts.ninjections):
         sim_xml.parse_to_column(sim, key, val)
 
     # add mass1 and mass2 columns
-    mchirp = static_args["mchirp"] \
+    if "q" in static_args.keys() or "q" in samples.keys():
+        mchirp = static_args["mchirp"] \
                     if "mchirp" in static_args.keys() else samples["mchirp"][i]
-    q = static_args["q"] if "q" in static_args.keys() else samples["q"][i]
-    sim.mass1, sim.mass2 = pnutils.mchirp_q_to_mass1_mass2(mchirp, q)
+        q = static_args["q"] if "q" in static_args.keys() else samples["q"][i]
+        sim.mass1, sim.mass2 = pnutils.mchirp_q_to_mass1_mass2(mchirp, q)
+        _, sim.eta = pnutils.mass1_mass2_to_mchirp_eta(sim.mass1, sim.mass2)
+    else:
+        sim.mchirp, sim.eta = pnutils.mass1_mass2_to_mchirp_eta(sim.mass1, sim.mass2)
+
+    # add ra and dec
+    if "ra" in static_args.keys() or "ra" in samples.keys():
+        ra = static_args["ra"] if "ra" in static_args.keys() else samples["ra"][i]
+        dec = static_args["dec"] if "dec" in static_args.keys() else samples["dec"][i]
+        sim.longitude = ra
+        sim.latitude = dec
+
+    # add coalescence time columns
+    if "tc" in static_args.keys() or "tc" in samples.keys():
+        tc = static_args["tc"] if "tc" in static_args.keys() else samples["tc"][i]
+        sim.geocent_end_time = int(tc)
+        sim.geocent_end_time_ns = int(tc % 1 * 1e9)
 
     # if user wants a specific network SNR then rescale the distance
     stat_key = "network_snr"
@@ -290,15 +307,16 @@ for i in range(opts.ninjections):
         for ifo, det in dets.iteritems():
 
             # get time delay to interferometer from center of the Earth
+            geocent_end_time = sim.geocent_end_time + sim.geocent_end_time_ns
             time_delay = det.time_delay_from_earth_center(sim.longitude,
                                                           sim.latitude,
-                                                          sim.geocent_end_time)
-            end_time = sim.geocent_end_time + time_delay
+                                                          geocent_end_time)
+            end_time = geocent_end_time + time_delay
 
             # get antenna pattern
             f_plus, f_cross = det.antenna_pattern(sim.longitude, sim.latitude,
                                                   sim.polarization,
-                                                  sim.geocent_end_time)
+                                                  geocent_end_time)
 
             # calculate strain
             logging.info("Calculating strain for %s", ifo)
@@ -340,7 +358,7 @@ for i in range(opts.ninjections):
         # distance scaling factor to get target network SNR
         network_snr = numpy.sqrt(network_snr)
         scale = network_snr / target_stat
-        sim.distance = scale*sim.distance
+        sim.distance = scale * sim.distance
         logging.info("Rescaled distance to %.3fMpc", sim.distance)
         for ifo in opts.instruments:
             attr_name = "eff_dist_" + ifo[0].lower()
