@@ -128,6 +128,7 @@ short code snippets below.
    noise
    waveform
    filter
+   distributions
 
 =============================
 Documentation for Developers
