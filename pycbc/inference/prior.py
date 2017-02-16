@@ -100,7 +100,7 @@ class PriorEvaluator(object):
         """ Evalualate prior for parameters.
         """
         params = dict(zip(self.variable_args, params))
-        mass1, mass2 = pnutils.mass1_mass2_from_mchirp_q(params["mchirp"], params["q"])
+        mass1, mass2 = pnutils.mchirp_q_to_mass1_mass2(params["mchirp"], params["q"])
         if mass1 / mass2 > mass_ratio_cut:
             return -numpy.inf
         return sum([d(**params) for d in self.distributions])
