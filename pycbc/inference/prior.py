@@ -14,7 +14,7 @@
 # 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 import numpy
-from pycbc import pnutils
+from pycbc import conversions
 mass_ratio_cut = 5.0
 
 #
@@ -100,8 +100,8 @@ class PriorEvaluator(object):
         """ Evalualate prior for parameters.
         """
         params = dict(zip(self.variable_args, params))
-        mass1, mass2 = pnutils.mchirp_q_to_mass1_mass2(params["mchirp"], params["q"])
-        if mass1 / mass2 > mass_ratio_cut:
+        q = conversions.q_from_mass1_mass2(params["mass1"], params["mass2"])
+        if q > mass_ratio_cut:
             return -numpy.inf
         return sum([d(**params) for d in self.distributions])
 
