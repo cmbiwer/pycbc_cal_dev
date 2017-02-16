@@ -13,6 +13,9 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
+import numpy
+from pycbc import pnutils
+mass_ratio_cut = 5.0
 
 #
 # =============================================================================
@@ -97,6 +100,9 @@ class PriorEvaluator(object):
         """ Evalualate prior for parameters.
         """
         params = dict(zip(self.variable_args, params))
+        mass1, mass2 = pnutils.mass1_mass2_from_mchirp_q(params["mchirp"], params["q"])
+        if mass1 / mass2 > mass_ratio_cut:
+            return -numpy.inf
         return sum([d(**params) for d in self.distributions])
 
 
