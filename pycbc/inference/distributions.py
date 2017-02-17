@@ -31,6 +31,7 @@ import scipy.stats
 import h5py
 from ConfigParser import Error
 import warnings
+from pycbc import conversions
 from pycbc.inference import boundaries
 
 VARARGS_DELIM = '+'
@@ -1672,6 +1673,126 @@ class UniformRadius(_BoundedDist):
                                                        variable_args,
                                                        bounds_required=True)
 
+class UniformChangeOfVariables(_BoundedDist):
+    """ Class for sampling uniform in one set of parameters (eg. mchirp, q)
+    such that its uniform in another set of parameters.
+    """
+
+    name = "uniform_change_of_variables"
+
+    def __init__(self, to_name="uniform", from_name="uniform", **params):
+        _from_params = {
+                      p : lims for p,lims in params.iteritems()
+                      if not p.startswith("to_") and not p.startswith("from_")}
+        super(UniformChangeOfVariables, self).__init__(**_from_params)
+
+        # get set of to-parameters
+        self.to_params = set(params["to_params"])
+
+        # get function that returns jacobian for transformation
+        self.jacobian = self._get_jacobian(self.params, self.to_params)
+
+        # get function that converts a dict of from-parameters to to-parameters
+        self.convert = self._get_convert(self.params, self.to_params)
+
+        # get bounds on to-parameters such that it fully encompasses all
+        # possible values for from-parameters
+        _to_params = self._get_to_params(self.params, self.to_params)(self)
+
+        # get distribution for from-parameters
+#        self.from_dist = distributions.distribs[from_name](**_from_params)
+        self.from_dist = Uniform(**_from_params)
+
+        # get distribution for to-parameters
+#        self.to_dist = distributions.distribs[to_name](**_to_params)
+        self.to_dist = Uniform(**_to_params)
+
+    def mass1_mass2_from_mchirp_q_jacobian(self, **kwargs):
+        """ Returns the Jacobian of mass1 and mass2 from chirp mass
+        and mass ratio."""
+        mass2 = conversions.mass2_from_mchirp_q(kwargs["mchirp"], kwargs["q"])
+        return kwargs["mchirp"] / mass2**2
+
+    def mass1_mass2_from_mchirp_q_convert(self, **kwargs):
+        """ Returns a dict with the mass1 and mass2 values from mchirp
+        and q."""
+        return {"mass1" : conversions.mass1_from_mchirp_q(
+                                                kwargs["mchirp"], kwargs["q"]),
+                "mass2" : conversions.mass2_from_mchirp_q(
+                                                kwargs["mchirp"], kwargs["q"])}
+
+    def mass1_mass2_from_mchirp_q_limit(self, **kwargs):
+        """ Returns a dict with the (min, max) bounds for mass1 and mass2
+        from mchirp and q."""
+        min_mchirp = self.bounds["mchirp"][0]
+        max_mchirp = self.bounds["mchirp"][1]
+        min_q = self.bounds["q"][0]
+        max_q = self.bounds["q"][1]
+        min_mass1 = conversions.mass1_from_mchirp_q(min_mchirp, min_q)
+        max_mass1 = conversions.mass1_from_mchirp_q(max_mchirp, max_q)
+        min_mass2 = conversions.mass2_from_mchirp_q(min_mchirp, max_q)
+        max_mass2 = conversions.mass2_from_mchirp_q(max_mchirp, min_q)
+        return {"mass1" : (min_mass1, max_mass1),
+                "mass2" : (min_mass2, max_mass2)}
+
+    # a dict with (in-parameters, out-parameters) as key and a function
+    # that returns the jacobian as value
+    jacobians = {
+        (frozenset(["mchirp", "q"]), frozenset(["mass1", "mass2"])) :
+                                       mass1_mass2_from_mchirp_q_jacobian,
+    }
+
+    # a dict with (in-parameters, out-parameters) as key and a function
+    # that returns the converted in-parameters in the new coordinates
+    converts = {
+        (frozenset(["mchirp", "q"]), frozenset(["mass1", "mass2"])) :
+                                        mass1_mass2_from_mchirp_q_convert,
+    }
+
+    # a dict with (in-parameters, out-parameters) as key and a function
+    # that returns the bounds of each out-parameter in a dict
+    limits = {
+        (frozenset(["mchirp", "q"]), frozenset(["mass1", "mass2"])) :
+                                          mass1_mass2_from_mchirp_q_limit,
+    }
+
+    @staticmethod
+    def _get_mapping(mapping, from_params, to_params):
+        """ Returns value of dictionary where key is
+        (in-parameters, out-parameters)."""
+        for key, func in mapping.iteritems():
+            from_params_in_mapping = set(key[0])
+            to_params_in_mapping = set(key[1])
+            if len(from_params_in_mapping.difference(from_params)) == 0 \
+                     and len(to_params_in_mapping.difference(to_params)) == 0:
+                return func
+        raise ValueError("Did not find %s for this transformation",
+                         mapping.__name__)
+
+    @classmethod
+    def _get_jacobian(cls, from_params, to_params):
+        """ Returns a function that computes Jacobian."""
+        return cls._get_mapping(cls.jacobians, from_params, to_params)
+
+    @classmethod
+    def _get_convert(cls, from_params, to_params):
+        """ Returns a function that converts parameters."""
+        return cls._get_mapping(cls.converts, from_params, to_params)
+
+    @classmethod
+    def _get_to_params(cls, from_params, to_params):
+        """ Returns a function that finds bounds of in-parameters."""
+        return cls._get_mapping(cls.limits, from_params, to_params)
+
+    def rvs(self, size=1, param=None):
+        pass
+
+    def _pdf(self, **kwargs):
+        jacobian = 1.0 / self.jacobian(self, **kwargs)
+        to_params = self.convert(self, **kwargs)
+        return jacobian * self.to_dist.pdf(**to_params) \
+                                                 / self.from_dist.pdf(**kwargs)
+
 distribs = {
     Uniform.name : Uniform,
     UniformAngle.name : UniformAngle,
@@ -1682,6 +1803,7 @@ distribs = {
     UniformRadius.name : UniformRadius,
     Gaussian.name : Gaussian,
     FromFile.name : FromFile,
+    UniformChangeOfVariables.name : UniformChangeOfVariables,
 }
 
 def read_distributions_from_config(cp, section="prior"):
