@@ -128,7 +128,7 @@ def get_param_bounds_from_config(cp, section, tag, param):
 
 
 def _bounded_from_config(cls, cp, section, variable_args,
-        bounds_required=False):
+                         bounds_required=False, **kwargs):
     """Returns a bounded distribution based on a configuration file. The
     parameters for the distribution are retrieved from the section titled
     "[`section`-`variable_args`]" in the config file.
@@ -191,6 +191,11 @@ def _bounded_from_config(cls, cp, section, variable_args,
             pass
         # add option
         dist_args.update({key:val})
+
+    # use any overrides
+    dist_args.update(kwargs)
+
+    print dist_args
 
     # construction distribution and add to list
     return cls(**dist_args)
@@ -333,7 +338,7 @@ class _BoundedDist(object):
             A distribution instance from the pycbc.inference.prior module.
         """
         return _bounded_from_config(cls, cp, section, variable_args,
-            bounds_required=bounds_required)
+                                    bounds_required=bounds_required)
 
 
 class Uniform(_BoundedDist):
@@ -501,7 +506,7 @@ class Uniform(_BoundedDist):
             A distribution instance from the pycbc.inference.prior module.
         """
         return super(Uniform, cls).from_config(cp, section, variable_args,
-            bounds_required=True)
+                     bounds_required=True)
 
 
 class UniformAngle(Uniform):
@@ -607,7 +612,7 @@ class UniformAngle(Uniform):
             A distribution instance from the pycbc.inference.prior module.
         """
         return _bounded_from_config(cls, cp, section, variable_args,
-            bounds_required=False)
+                                    bounds_required=False)
 
 
 class SinAngle(UniformAngle):
@@ -1673,17 +1678,16 @@ class UniformRadius(_BoundedDist):
                                                        variable_args,
                                                        bounds_required=True)
 
-class UniformChangeOfVariables(_BoundedDist):
+class UniformChangeOfVariables(Uniform):
     """ Class for sampling uniform in one set of parameters (eg. mchirp, q)
     such that its uniform in another set of parameters.
     """
 
     name = "uniform_change_of_variables"
 
-    def __init__(self, to_name="uniform", from_name="uniform", **params):
-        _from_params = {
-                      p : lims for p,lims in params.iteritems()
-                      if not p.startswith("to_") and not p.startswith("from_")}
+    def __init__(self, **params):
+        _from_params = {p : lims for p,lims in params.iteritems()
+                        if not p.startswith("to")}
         super(UniformChangeOfVariables, self).__init__(**_from_params)
 
         # get set of to-parameters
@@ -1699,12 +1703,10 @@ class UniformChangeOfVariables(_BoundedDist):
         # possible values for from-parameters
         _to_params = self._get_to_params(self.params, self.to_params)(self)
 
-        # get distribution for from-parameters
-#        self.from_dist = distributions.distribs[from_name](**_from_params)
+        # get Uniform distribution for from-parameters
         self.from_dist = Uniform(**_from_params)
 
-        # get distribution for to-parameters
-#        self.to_dist = distributions.distribs[to_name](**_to_params)
+        # get Uniform distribution for to-parameters
         self.to_dist = Uniform(**_to_params)
 
     def mass1_mass2_from_mchirp_q_jacobian(self, **kwargs):
@@ -1766,8 +1768,8 @@ class UniformChangeOfVariables(_BoundedDist):
             if len(from_params_in_mapping.difference(from_params)) == 0 \
                      and len(to_params_in_mapping.difference(to_params)) == 0:
                 return func
-        raise ValueError("Did not find %s for this transformation",
-                         mapping.__name__)
+        raise ValueError("Did not find %s to %s "
+                         "transformation" % (str(from_params), str(to_params)))
 
     @classmethod
     def _get_jacobian(cls, from_params, to_params):
@@ -1784,14 +1786,18 @@ class UniformChangeOfVariables(_BoundedDist):
         """ Returns a function that finds bounds of in-parameters."""
         return cls._get_mapping(cls.limits, from_params, to_params)
 
-    def rvs(self, size=1, param=None):
-        pass
-
     def _pdf(self, **kwargs):
         jacobian = 1.0 / self.jacobian(self, **kwargs)
         to_params = self.convert(self, **kwargs)
         return jacobian * self.to_dist.pdf(**to_params) \
                                                  / self.from_dist.pdf(**kwargs)
+
+    @classmethod
+    def from_config(cls, cp, section, variable_args):
+        to_params = cp.get_opt_tags(section + "-" + variable_args,
+                                    "to-params", []).split("+")
+        return _bounded_from_config(cls, cp, section, variable_args,
+                                    bounds_required=True, to_params=to_params)
 
 distribs = {
     Uniform.name : Uniform,
