@@ -1704,14 +1704,12 @@ class UniformChangeOfVariables(Uniform):
         # get Uniform distribution for to-parameters
         self.to_dist = Uniform(**_to_params)
 
-    @staticmethod
     def mass1_mass2_from_mchirp_q_jacobian(**kwargs):
         """ Returns the Jacobian of mass1 and mass2 from chirp mass
         and mass ratio."""
         mass2 = conversions.mass2_from_mchirp_q(kwargs["mchirp"], kwargs["q"])
         return kwargs["mchirp"] / mass2**2
 
-    @staticmethod
     def mass1_mass2_from_mchirp_q_convert(**kwargs):
         """ Returns a dict with the mass1 and mass2 values from mchirp
         and q."""
@@ -1720,8 +1718,7 @@ class UniformChangeOfVariables(Uniform):
                 "mass2" : conversions.mass2_from_mchirp_q(
                                                 kwargs["mchirp"], kwargs["q"])}
 
-    @staticmethod
-    def mass1_mass2_from_mchirp_q_limit(**kwargs):
+    def mass1_mass2_from_mchirp_q_limit(self, **kwargs):
         """ Returns a dict with the (min, max) bounds for mass1 and mass2
         from mchirp and q."""
         min_mchirp = self.bounds["mchirp"][0]
@@ -1773,20 +1770,17 @@ class UniformChangeOfVariables(Uniform):
         raise ValueError("Did not find %s to %s "
                          "transformation" % (str(from_params), str(to_params)))
 
-    @property
-    def jacobian(self):
-        """ Returns a function that computes Jacobian."""
-        return self.jacobians[self.mapping]
+    def jacobian(self, **kwargs):
+        """ Returns Jacobian."""
+        return self.jacobians[self.mapping](**kwargs)
 
-    @property
-    def convert(self):
-        """ Returns a function that converts parameters."""
-        return self.converts[self.mapping]
+    def convert(self, **kwargs):
+        """ Returns converted parameters."""
+        return self.converts[self.mapping](**kwargs)
 
-    @property
-    def to_params_bounds(self):
-        """ Returns a function that finds bounds of in-parameters."""
-        return self.limits[self.mapping]
+    def to_params_bounds(self, **kwargs):
+        """ Returns bounds of out-parameters."""
+        return self.limits[self.mapping](self, **kwargs)
 
     def _pdf(self, **kwargs):
         jacobian = 1.0 / self.jacobian(**kwargs)
