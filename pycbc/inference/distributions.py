@@ -195,8 +195,6 @@ def _bounded_from_config(cls, cp, section, variable_args,
     # use any overrides
     dist_args.update(kwargs)
 
-    print dist_args
-
     # construction distribution and add to list
     return cls(**dist_args)
 
