@@ -1691,15 +1691,12 @@ class UniformChangeOfVariables(Uniform):
         # get set of to-parameters
         self.to_params = set(params["to_params"])
 
-        # get function that returns jacobian for transformation
-        self.jacobian = self._get_jacobian(self.params, self.to_params)
-
-        # get function that converts a dict of from-parameters to to-parameters
-        self.convert = self._get_convert(self.params, self.to_params)
+        # get str name for transformation
+        self.mapping = self._get_mapping(self.params, self.to_params)
 
         # get bounds on to-parameters such that it fully encompasses all
         # possible values for from-parameters
-        _to_params = self._get_to_params(self.params, self.to_params)(self)
+        _to_params = self.to_params_bounds()
 
         # get Uniform distribution for from-parameters
         self.from_dist = Uniform(**_from_params)
@@ -1707,13 +1704,15 @@ class UniformChangeOfVariables(Uniform):
         # get Uniform distribution for to-parameters
         self.to_dist = Uniform(**_to_params)
 
-    def mass1_mass2_from_mchirp_q_jacobian(self, **kwargs):
+    @staticmethod
+    def mass1_mass2_from_mchirp_q_jacobian(**kwargs):
         """ Returns the Jacobian of mass1 and mass2 from chirp mass
         and mass ratio."""
         mass2 = conversions.mass2_from_mchirp_q(kwargs["mchirp"], kwargs["q"])
         return kwargs["mchirp"] / mass2**2
 
-    def mass1_mass2_from_mchirp_q_convert(self, **kwargs):
+    @staticmethod
+    def mass1_mass2_from_mchirp_q_convert(**kwargs):
         """ Returns a dict with the mass1 and mass2 values from mchirp
         and q."""
         return {"mass1" : conversions.mass1_from_mchirp_q(
@@ -1721,7 +1720,8 @@ class UniformChangeOfVariables(Uniform):
                 "mass2" : conversions.mass2_from_mchirp_q(
                                                 kwargs["mchirp"], kwargs["q"])}
 
-    def mass1_mass2_from_mchirp_q_limit(self, **kwargs):
+    @staticmethod
+    def mass1_mass2_from_mchirp_q_limit(**kwargs):
         """ Returns a dict with the (min, max) bounds for mass1 and mass2
         from mchirp and q."""
         min_mchirp = self.bounds["mchirp"][0]
@@ -1735,58 +1735,62 @@ class UniformChangeOfVariables(Uniform):
         return {"mass1" : (min_mass1, max_mass1),
                 "mass2" : (min_mass2, max_mass2)}
 
+    # a dict with a string name as key and (in-parameters, out-parameters)
+    # as value
+    mappings = {
+        "mass1_mass2_from_mchirp_q" : (frozenset(["mchirp", "q"]),
+                                       frozenset(["mass1", "mass2"])),
+    }
+
     # a dict with (in-parameters, out-parameters) as key and a function
     # that returns the jacobian as value
     jacobians = {
-        (frozenset(["mchirp", "q"]), frozenset(["mass1", "mass2"])) :
-                                       mass1_mass2_from_mchirp_q_jacobian,
+        "mass1_mass2_from_mchirp_q" : mass1_mass2_from_mchirp_q_jacobian,
     }
 
     # a dict with (in-parameters, out-parameters) as key and a function
     # that returns the converted in-parameters in the new coordinates
     converts = {
-        (frozenset(["mchirp", "q"]), frozenset(["mass1", "mass2"])) :
-                                        mass1_mass2_from_mchirp_q_convert,
+        "mass1_mass2_from_mchirp_q" : mass1_mass2_from_mchirp_q_convert,
     }
 
     # a dict with (in-parameters, out-parameters) as key and a function
     # that returns the bounds of each out-parameter in a dict
     limits = {
-        (frozenset(["mchirp", "q"]), frozenset(["mass1", "mass2"])) :
-                                          mass1_mass2_from_mchirp_q_limit,
+        "mass1_mass2_from_mchirp_q" : mass1_mass2_from_mchirp_q_limit,
     }
 
-    @staticmethod
-    def _get_mapping(mapping, from_params, to_params):
+    @classmethod
+    def _get_mapping(cls, from_params, to_params):
         """ Returns value of dictionary where key is
         (in-parameters, out-parameters)."""
-        for key, func in mapping.iteritems():
-            from_params_in_mapping = set(key[0])
-            to_params_in_mapping = set(key[1])
+        for key, val in cls.mappings.iteritems():
+            from_params_in_mapping = set(val[0])
+            to_params_in_mapping = set(val[1])
             if len(from_params_in_mapping.difference(from_params)) == 0 \
                      and len(to_params_in_mapping.difference(to_params)) == 0:
-                return func
+                return key
         raise ValueError("Did not find %s to %s "
                          "transformation" % (str(from_params), str(to_params)))
 
-    @classmethod
-    def _get_jacobian(cls, from_params, to_params):
+    @property
+    def jacobian(self):
         """ Returns a function that computes Jacobian."""
-        return cls._get_mapping(cls.jacobians, from_params, to_params)
+        return self.jacobians[self.mapping]
 
-    @classmethod
-    def _get_convert(cls, from_params, to_params):
+    @property
+    def convert(self):
         """ Returns a function that converts parameters."""
-        return cls._get_mapping(cls.converts, from_params, to_params)
+        return self.converts[self.mapping]
 
-    @classmethod
-    def _get_to_params(cls, from_params, to_params):
+    @property
+    def to_params_bounds(self):
         """ Returns a function that finds bounds of in-parameters."""
-        return cls._get_mapping(cls.limits, from_params, to_params)
+        return self.limits[self.mapping]
 
     def _pdf(self, **kwargs):
-        jacobian = 1.0 / self.jacobian(self, **kwargs)
-        to_params = self.convert(self, **kwargs)
+        jacobian = 1.0 / self.jacobian(**kwargs)
+        to_params = self.convert(**kwargs)
         return jacobian * self.to_dist.pdf(**to_params) \
                                                  / self.from_dist.pdf(**kwargs)
 
