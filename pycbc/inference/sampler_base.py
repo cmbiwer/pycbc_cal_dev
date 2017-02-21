@@ -245,7 +245,21 @@ class BaseMCMCSampler(_BaseSampler):
         pmap = dict([[param, k] for k, param in enumerate(self.variable_args)])
         p0 = numpy.ones((nwalkers, ndim))
         for dist in prior_distributions:
-            ps = dist.rvs(size=nwalkers)
+            if "mchirp" in dist.params:
+                n = 0
+                ps = {"mchirp" : [], "q" : []}
+                while n < nwalkers:
+                    p = dist.rvs(size=1)
+                    mtotal = conversions.mtotal_from_mchirp_eta(
+                                           p["mchirp"],
+                                           conversions.eta_from_q(p["q"]))
+                    if mtotal > 500:
+                        continue
+                    ps["mchirp"].append(p["mchirp"])
+                    ps["q"].append(p["q"])
+                    n += 1
+            else:
+                ps = dist.rvs(size=nwalkers)
             for param in dist.params:
                 p0[:, pmap[param]] = ps[param]
         self._p0 = p0

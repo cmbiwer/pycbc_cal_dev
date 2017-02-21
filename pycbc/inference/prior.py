@@ -26,9 +26,6 @@ This modules provides classes and functions for evaluating the prior
 for parameter estimation.
 """
 
-import numpy
-from pycbc import conversions
-
 class PriorEvaluator(object):
     """
     Callable class that calculates the prior.
@@ -100,9 +97,6 @@ class PriorEvaluator(object):
         """ Evalualate prior for parameters.
         """
         params = dict(zip(self.variable_args, params))
-        mtotal = conversions.mtotal_from_mchirp_eta(params["mchirp"], conversions.eta_from_q(params["q"]))
-        if mtotal > 500:
-            return -numpy.inf
         return sum([d(**params) for d in self.distributions])
 
 
