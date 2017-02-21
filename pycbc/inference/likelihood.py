@@ -280,6 +280,8 @@ class _BaseLikelihoodEvaluator(object):
         logp = self._prior(params)
         if logp == -numpy.inf:
             return self._formatreturn(logp, prior=logp)
+#        p = dict(zip(self._prior.variable_args, params))
+#        print p["mchirp"], p["q"]
         llr = self.loglr(params)
         return self._formatreturn(llr + logp, prior=logp, loglr=llr)
 

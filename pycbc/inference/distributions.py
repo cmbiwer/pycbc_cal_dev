@@ -1788,6 +1788,19 @@ class UniformChangeOfVariables(Uniform):
         return jacobian * self.to_dist.pdf(**to_params) \
                                                  / self.from_dist.pdf(**kwargs)
 
+    def _logpdf(self, **kwargs):
+        """Returns the log of the pdf at the given values. The keyword
+        arguments must contain all of parameters in self's params. Unrecognized
+        arguments are ignored.
+        """
+        mtotal = conversions.mtotal_from_mchirp_eta(kwargs["mchirp"], conversions.eta_from_q(kwargs["q"]))
+        if mtotal > 500:
+            return -numpy.inf
+        elif kwargs in self:
+            return numpy.log(self._pdf(**kwargs))
+        else:
+            return -numpy.inf
+
     @classmethod
     def from_config(cls, cp, section, variable_args):
         to_params = cp.get_opt_tags(section + "-" + variable_args,
