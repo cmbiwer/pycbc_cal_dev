@@ -76,11 +76,7 @@ def mchirp_mass1_to_mass2(mchirp, mass1):
 
     this has 3 solutions but only one will be real.
     """
-<<<<<<< HEAD
-    return derived_parameters.mass2_from_mchirp_mass1(mchirp, mass1)
-=======
     return conversions.mass2_from_mchirp_mass1(mchirp, mass1)
->>>>>>> Add derived parameters module (#1429)
 
 def eta_mass1_to_mass2(eta, mass1, return_mass_heavier=False, force_real=True):
     """
@@ -95,11 +91,7 @@ def eta_mass1_to_mass2(eta, mass1, return_mass_heavier=False, force_real=True):
     mass1 > mass2 is returned. Use the return_mass_heavier kwarg to invert this
     behaviour.
     """
-<<<<<<< HEAD
-    return derived_parameters.mass_from_knownmass_eta(eta, mass1,
-=======
     return conversions.mass_from_knownmass_eta(mass1, eta,
->>>>>>> Add derived parameters module (#1429)
         known_is_secondary=return_mass_heavier, force_real=force_real)
 
 def mchirp_q_to_mass1_mass2(mchirp, q):
@@ -112,37 +104,15 @@ def mchirp_q_to_mass1_mass2(mchirp, q):
 
     Then we can map from (mchirp,eta) to (mass1,mass2).
     """
-<<<<<<< HEAD
-    eta = derived_parameters.eta_from_q(q)
-    mass1 = dervied_parameters.mass1_from_mchirp_eta(mchirp, eta)
-    mass2 = derived_parameters.mass2_from_mchirp_eta(mchirp, eta)
-=======
     eta = conversions.eta_from_q(q)
     mass1 = conversions.mass1_from_mchirp_eta(mchirp, eta)
     mass2 = conversions.mass2_from_mchirp_eta(mchirp, eta)
->>>>>>> Add derived parameters module (#1429)
     return mass1, mass2
 
 def A0(f_lower):
     """used in calculating chirp times: see Cokelaer, arxiv.org:0706.4437
        appendix 1, also lalinspiral/python/sbank/tau0tau3.py
     """
-<<<<<<< HEAD
-    return derived_parameters._a0(f_lower)
-
-def A3(f_lower):
-    """another parameter used for chirp times"""
-    return derived_parameters._a3(f_lower)
-  
-def mass1_mass2_to_tau0_tau3(mass1, mass2, f_lower):
-    tau0 = derived_parameters.tau0_from_mass1_mass2(mass1, mass2, f_lower)
-    tau3 = derived_parameters.tau3_from_mass1_mass2(mass1, mass2, f_lower)
-    return tau0,tau3
-
-def tau0_tau3_to_mtotal_eta(tau0, tau3, f_lower):
-    mtotal = derived_parameters.mtotal_from_tau0_tau3(tau0, tau3, f_lower)
-    eta = derived_parameters.eta_from_tau0_tau3(tau0, tau3, f_lower)
-=======
     return conversions._a0(f_lower)
 
 def A3(f_lower):
@@ -157,7 +127,6 @@ def mass1_mass2_to_tau0_tau3(mass1, mass2, f_lower):
 def tau0_tau3_to_mtotal_eta(tau0, tau3, f_lower):
     mtotal = conversions.mtotal_from_tau0_tau3(tau0, tau3, f_lower)
     eta = conversions.eta_from_tau0_tau3(tau0, tau3, f_lower)
->>>>>>> Add derived parameters module (#1429)
     return mtotal, eta
 
 def tau0_tau3_to_mass1_mass2(tau0, tau3, f_lower):
