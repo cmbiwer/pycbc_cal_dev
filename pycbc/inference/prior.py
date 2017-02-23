@@ -100,8 +100,13 @@ class PriorEvaluator(object):
         """ Evalualate prior for parameters.
         """
         params = dict(zip(self.variable_args, params))
+
+        # custom cuts
         mtotal = conversions.mtotal_from_mchirp_eta(params["mchirp"], conversions.eta_from_q(params["q"]))
         if mtotal > 500:
             return -numpy.inf
+        elif params["q"] > 3 and params["spin1z"] < (-3.1 * params["q"] + 1.2 / params["q"]**2):
+            return -numpy.inf
+
         return sum([d(**params) for d in self.distributions])
 
