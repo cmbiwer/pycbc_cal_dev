@@ -1793,10 +1793,7 @@ class UniformChangeOfVariables(Uniform):
         arguments must contain all of parameters in self's params. Unrecognized
         arguments are ignored.
         """
-        mtotal = conversions.mtotal_from_mchirp_eta(kwargs["mchirp"], conversions.eta_from_q(kwargs["q"]))
-        if mtotal > 500:
-            return -numpy.inf
-        elif kwargs in self:
+        if kwargs in self:
             return numpy.log(self._pdf(**kwargs))
         else:
             return -numpy.inf
