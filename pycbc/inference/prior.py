@@ -28,6 +28,7 @@ for parameter estimation.
 
 import numpy
 from pycbc import conversions
+from pycbc import coordinates
 
 class PriorEvaluator(object):
     """
