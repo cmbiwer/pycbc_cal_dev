@@ -30,6 +30,19 @@ import numpy
 from pycbc import conversions
 from pycbc import coordinates
 
+def cut(params):
+
+    # custom cuts
+    # use spin1z for primary mass because mchirp-q conversion makes mass1 the primary mass by default
+    mtotal = conversions.mtotal_from_mchirp_eta(params["mchirp"], conversions.eta_from_q(params["q"]))
+    spin1z, _, _ = coordinates.spherical_to_cartesian(params["spin1_a"], params["spin1_azimuthal"], params["spin1_polar"])
+    if mtotal > 500:
+        return True
+    elif params["q"] > 3 and spin1z < (-3.1 / params["q"] + 1.2 / params["q"]**2):
+        return True
+
+    return False
+
 class PriorEvaluator(object):
     """
     Callable class that calculates the prior.
@@ -101,15 +114,7 @@ class PriorEvaluator(object):
         """ Evalualate prior for parameters.
         """
         params = dict(zip(self.variable_args, params))
-
-        # custom cuts
-        # use spin1z for primary mass because mchirp-q conversion makes mass1 the primary mass by default
-        mtotal = conversions.mtotal_from_mchirp_eta(params["mchirp"], conversions.eta_from_q(params["q"]))
-        spin1z, _, _ = coordinates.spherical_to_cartesian(params["spin1_a"], params["spin1_azimuthal"], params["spin1_polar"])
-        if mtotal > 500:
+        if cut(params):
             return -numpy.inf
-        elif params["q"] > 3 and spin1z < (-3.1 / params["q"] + 1.2 / params["q"]**2):
-            return -numpy.inf
-
         return sum([d(**params) for d in self.distributions])
 
