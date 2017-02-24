@@ -29,6 +29,7 @@ packages for parameter estimation.
 import numpy
 from pycbc.io import FieldArray
 from pycbc.filter import autocorrelation
+from pycbc.inference import prior
 
 #
 # =============================================================================
@@ -244,24 +245,27 @@ class BaseMCMCSampler(_BaseSampler):
         ndim = len(self.variable_args)
         pmap = dict([[param, k] for k, param in enumerate(self.variable_args)])
         p0 = numpy.ones((nwalkers, ndim))
-        for dist in prior_distributions:
-            if "mchirp" in dist.params:
-                n = 0
-                ps = {"mchirp" : [], "q" : []}
-                while n < nwalkers:
-                    p = dist.rvs(size=1)
-                    mtotal = conversions.mtotal_from_mchirp_eta(
-                                           p["mchirp"],
-                                           conversions.eta_from_q(p["q"]))
-                    if mtotal > 500:
-                        continue
-                    ps["mchirp"].append(p["mchirp"])
-                    ps["q"].append(p["q"])
-                    n += 1
-            else:
-                ps = dist.rvs(size=nwalkers)
-            for param in dist.params:
-                p0[:, pmap[param]] = ps[param]
+        n = 0
+        accepted_vals = {}
+        while n < nwalkers:
+            variable_args = []
+            vals = []
+            for dist in prior_distributions:
+                draw = dist.rvs(size=1)
+                for param in dist.params:
+                    variable_args.append(param)
+                    vals.append(draw[param])
+            prior_eval = prior.PriorEvaluator(variable_args, *prior_distributions)
+            if prior_eval(vals) == -numpy.inf:
+                continue
+            for param, val in zip(variable_args, vals):
+                if param not in accepted_vals.keys():
+                    accepted_vals[param] = [val]
+                else:
+                    accepted_vals[param].append(val)
+            n += 1
+        for param in accepted_vals.keys():
+            p0[:, pmap[param]] = accepted_vals[param]
         self._p0 = p0
         return p0
 
