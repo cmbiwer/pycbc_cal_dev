@@ -257,7 +257,7 @@ for i in range(opts.ninjections):
     for key, val in static_args.iteritems():
         sim_xml.parse_to_column(sim, key, val)
 
-    # add mass1 and mass2 columns
+    # add mass columns
     if "q" in static_args.keys() or "q" in samples.keys():
         mchirp = static_args["mchirp"] \
                     if "mchirp" in static_args.keys() else samples["mchirp"][i]
@@ -266,6 +266,12 @@ for i in range(opts.ninjections):
         _, sim.eta = pnutils.mass1_mass2_to_mchirp_eta(sim.mass1, sim.mass2)
     else:
         sim.mchirp, sim.eta = pnutils.mass1_mass2_to_mchirp_eta(sim.mass1, sim.mass2)
+
+    # make mass1 the primary mass
+    if sim.mass2 > sim.mass1:
+        tmp = sim.mass1
+        sim.mass1 = sim.mass2
+        sim.mass2 = tmp
 
     # add ra and dec
     if "ra" in static_args.keys() or "ra" in samples.keys():
