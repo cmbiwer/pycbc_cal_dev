@@ -47,9 +47,8 @@ def cut(params, approximant=None):
         spin1z, _, _ = coordinates.spherical_to_cartesian(
                                   params["spin1_a"], params["spin1_azimuthal"],
                                   params["spin1_polar"])
-    else:
-        spin1z = conversions.primary_spin(params["mass1"], params["mass2"],
-                                          params["spin1z"], params["spin2z"])
+    elif "q" in parameters:
+        spin1z = params["spin1z"]
 
     # total mass cut
     if mtotal > 500:
