@@ -30,15 +30,34 @@ import numpy
 from pycbc import conversions
 from pycbc import coordinates
 
-def cut(params):
+def cut(params, approximant=None):
 
-    # custom cuts
-    # use spin1z for primary mass because mchirp-q conversion makes mass1 the primary mass by default
-    mtotal = conversions.mtotal_from_mchirp_eta(params["mchirp"], conversions.eta_from_q(params["q"]))
-    spin1z, _, _ = coordinates.spherical_to_cartesian(params["spin1_a"], params["spin1_azimuthal"], params["spin1_polar"])
+    # get parameters
+    parameters = params.keys()
+
+    # get total mass
+    if "q" in parameters:
+        mtotal = conversions.mtotal_from_mchirp_eta(
+                         params["mchirp"], conversions.eta_from_q(params["q"]))
+    else:
+        mtotal = params["mass1"] + params["mass2"]
+
+    # get primary mass spin
+    if "spin1_a" in parameters and "q" in parameters:
+        spin1z, _, _ = coordinates.spherical_to_cartesian(
+                                  params["spin1_a"], params["spin1_azimuthal"],
+                                  params["spin1_polar"])
+    else:
+        spin1z = conversions.primary_spin(params["mass1"], params["mass2"],
+                                          params["spin1z"], params["spin2z"])
+
+    # total mass cut
     if mtotal > 500:
         return True
-    elif params["q"] > 3 and spin1z < (-3.1 / params["q"] + 1.2 / params["q"]**2):
+
+    # primary mass spin cut
+    elif approximant == "IMPRPhenomPv2" and \
+                          spin1z < (-3.1 / params["q"] + 1.2 / params["q"]**2):
         return True
 
     return False
