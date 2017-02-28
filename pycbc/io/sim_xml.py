@@ -110,7 +110,7 @@ def ifo_distance_to_column(sim, ifo, f_plus, f_cross):
 def ifo_sigma_squared_to_column(sim, ifo, sigma_squared):
     """ Saves teh specific IFO sigma to a depreciated column.
     """
-    sigma = numpy.sqrt(simga_squared)
+    sigma = numpy.sqrt(sigma_squared)
     if ifo == "H1":
         sim.alpha4 = sigma
     elif ifo == "L1":
