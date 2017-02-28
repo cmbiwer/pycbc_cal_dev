@@ -16,6 +16,7 @@
 """
 
 import glue
+import numpy
 from glue.ligolw import ilwd
 from glue.ligolw import ligolw
 from glue.ligolw import lsctables
@@ -106,3 +107,15 @@ def ifo_distance_to_column(sim, ifo, f_plus, f_cross):
                                                f_plus, f_cross)
     setattr(sim, "eff_dist_" + ifo[0].lower(), eff_distance)
 
+def ifo_sigma_squared_to_column(sim, ifo, sigma_squared):
+    """ Saves teh specific IFO sigma to a depreciated column.
+    """
+    sigma = numpy.sqrt(simga_squared)
+    if ifo == "H1":
+        sim.alpha4 = sigma
+    elif ifo == "L1":
+        sim.alpha5 = sigma
+    elif ifo == "V1":
+        sim.alpha6 = sigma
+    else:
+        raise ValueError("Do not know ifo %s" % ifo)

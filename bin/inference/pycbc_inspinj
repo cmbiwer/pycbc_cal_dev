@@ -359,6 +359,7 @@ for i in range(opts.ninjections):
             sim_xml.ifo_distance_to_column(sim, ifo, f_plus, f_cross)
 
             # include sigma in network SNR calculation
+            sim_xml.ifo_sigma_squared_to_column(sim, ifo, sigma_squared)
             network_snr += sigma_squared
 
         # distance scaling factor to get target network SNR
