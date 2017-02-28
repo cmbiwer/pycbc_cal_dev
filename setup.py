@@ -446,6 +446,7 @@ setup (
                'bin/inference/pycbc_inference_plot_prior',
                'bin/inference/pycbc_inference_plot_samples',
                'bin/inference/pycbc_inference_table_summary',
+               'bin/inference/pycbc_inspinj',
                'bin/plotting/pycbc_plot_waveform',
                'bin/plotting/pycbc_banksim_plot_eff_fitting_factor',
                'bin/plotting/pycbc_banksim_table_point_injs',
