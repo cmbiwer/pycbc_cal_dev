@@ -1,0 +1,144 @@
+#! /usr/bin/env python
+
+# Copyright (C) 2017 Christopher M. Biwer
+#
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+# option) any later version.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General
+# Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+""" Plots the mass range.
+"""
+
+import argparse
+import logging
+import matplotlib as mpl; mpl.use("Agg")
+import matplotlib.pyplot as plt
+import numpy
+import os.path
+import pickle
+import pycbc
+from pycbc import conversions
+from pycbc import cosmology
+from pycbc import inject
+from pycbc import io
+from pycbc import pnutils
+from pycbc import results
+from pycbc.inference import option_utils
+
+# command line usage
+parser = argparse.ArgumentParser(usage=__file__ + " [--options]",
+                                 description=__doc__)
+
+# verbose option
+parser.add_argument("--verbose", action="store_true", default=False,
+    help="Print logging info.")
+
+# input options
+parser.add_argument("--input-files", nargs="+", type=str, required=True,
+                    help="Input inference files.")
+parser.add_argument("--iteration", type=int, default=None)
+parser.add_argument("--thin-start", type=int, default=None)
+parser.add_argument("--thin-end", type=int, default=None)
+parser.add_argument("--thin-interval", type=int, default=None)
+
+# output options
+parser.add_argument("--output-file", type=str, required=True,
+                    help="Path to output plot.")
+
+# parse the command line
+opts = parser.parse_args()
+
+# setup log
+pycbc.init_logging(opts.verbose)
+
+results_intervals = []
+results_injected = []
+
+# loop over each input file
+for i, input_file in enumerate(opts.input_files):
+    logging.info("%d %s", i, input_file)
+
+    tag = "_".join(input_file.rstrip(".hdf").split("/")[-1].split("_")[1:])
+    if tag.endswith("_0"):
+        continue
+
+    if len(os.path.dirname(input_file)):
+        injection_file = "os.path.dirname(input_file)" + "/" + "injection_" + tag + "_det.xml.gz"
+    else:
+        injection_file = "injection_" + tag + "_det.xml.gz"
+
+    data = {}
+    try:
+        fp = io.InferenceFile(input_file, "r")
+        for parameter in ["mchirp", "q", "spin1z", "spin2z", "redshift",
+                          "distance"]:
+            data[parameter] = fp.read_samples(
+                                parameter,
+                                iteration=opts.iteration,
+                                thin_start=opts.thin_start,
+                                thin_interval=opts.thin_interval,
+                                thin_end=opts.thin_end)[parameter]
+        likelihood_stats = fp.read_likelihood_stats(
+                            iteration=opts.iteration,
+                            thin_start=opts.thin_start,
+                            thin_end=opts.thin_end,
+                            thin_interval=opts.thin_interval)
+        data["snr"], _ = option_utils.get_zvalues(fp, "snr", likelihood_stats)
+    except:
+        print "Error with", input_file
+        try:
+            fp.close()
+        except:
+            continue
+        continue
+
+    data["mass1"], data["mass2"] = pnutils.mchirp_q_to_mass1_mass2(data["mchirp"], data["q"])
+
+    data["mchirp_src"] = data["mchirp"] / (1 + data["redshift"])
+    data["mass1_src"] = data["mass1"] / (1 + data["redshift"])
+    data["mass2_src"] = data["mass2"] / (1 + data["redshift"])
+
+    data["chi_eff"] = (data["spin1z"] * data["mass1_src"] + data["spin2z"] * data["mass2_src"]) / (data["mass1_src"] + data["mass2_src"])
+
+    percentiles = [5., 50., 95.]
+    intervals = {}
+    for name, arr in data.iteritems():
+        low, med, high = numpy.percentile(arr, percentiles)
+        intervals[name + "_low"] = low
+        intervals[name + "_med"] = med
+        intervals[name + "_high"] = high
+
+    injected = {}
+    injections = inject.InjectionSet(injection_file)
+    for sim in injections.table:
+        for parameter in ["mchirp", "mass1", "mass2", "spin1z", "spin2z"]:
+            injected[parameter] = getattr(sim, parameter)
+
+        injected["distance"] = sim.distance
+        injected["redshift"] = cosmology.redshift(sim.distance)
+        injected["mchirp_src"] = injected["mchirp"] / (1 + injected["redshift"])
+        injected["mass1_src"] = injected["mass1"] / (1 + injected["redshift"])
+        injected["mass2_src"] = injected["mass2"] / (1 + injected["redshift"])
+        injected["chi_eff"] = (injected["spin1z"] * injected["mass1_src"] + injected["spin2z"] * injected["mass2_src"]) / (injected["mass1_src"] + injected["mass2_src"])
+        injected["q"] = conversions.q_from_mass1_mass2(injected["mass1"], injected["mass2"])
+
+        break
+
+    results_intervals.append(intervals)
+    results_injected.append(injected)
+
+results = [results_intervals, results_injected]
+
+with open(opts.output_file, "w") as fp:
+    pickle.dump(results, fp)
+
+

@@ -1,0 +1,95 @@
+#! /usr/bin/env python
+
+# Copyright (C) 2017 Christopher M. Biwer
+#
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+# option) any later version.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General
+# Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+""" Plots the mass range.
+"""
+
+import argparse
+import logging
+import matplotlib as mpl#; mpl.use("Agg")
+import matplotlib.pyplot as plt
+import numpy
+import pickle
+import pycbc
+from pycbc import conversions
+
+# command line usage
+parser = argparse.ArgumentParser(usage=__file__ + " [--options]",
+                                 description=__doc__)
+
+# input options
+parser.add_argument("--input-file", type=str, required=True,
+                    help="Input file.")
+
+# output options
+parser.add_argument("--output-dir", type=str, required=True,
+                    help="Path to output plot.")
+
+# parse the command line
+opts = parser.parse_args()
+
+# get data from pickle
+intervals, injected =  pickle.load(open(opts.input_file, "r"))
+
+# add q
+for inject in injected:
+    inject["q"] = conversions.q_from_mass1_mass2(inject["mass1"],
+                                                 inject["mass2"])
+
+# get number of injections
+n_injections = len(injected)
+
+# plot mchirp, mass1, mass2
+for parameter in ["mchirp_src", "mass1_src", "mass2_src", "mchirp", "q",
+                  "mass1", "mass2", "distance", "redshift",
+                  "chi_eff", "spin1z", "spin2z"]:
+
+    for interval, inject in zip(intervals, injected):
+        plt.errorbar([inject[parameter]],
+                     [interval[parameter + "_med"]],
+                     yerr=[[interval[parameter + "_med"] - interval[parameter + "_low"]],
+                           [interval[parameter + "_high"] - interval[parameter + "_med"]]],
+                     c="black", zorder=1)
+        plt.scatter(inject[parameter], interval[parameter + "_med"],
+                    c=interval["snr_med"], cmap=plt.get_cmap("afmhot_r"),
+                    vmin=0, vmax=30, zorder=2)
+
+    # get min and max for plotting
+    y_max = numpy.array([intervals[i][parameter + "_high"] for i in range(n_injections)]).max()
+    y_min = numpy.array([intervals[i][parameter + "_low"] for i in range(n_injections)]).min()
+    x_max = numpy.array([injected[i][parameter] for i in range(n_injections)]).max()
+    x_min = numpy.array([injected[i][parameter] for i in range(n_injections)]).min()
+    plt_max = max(0.9 * x_max, 1.1 * y_max)
+    plt_min = min(0.9 * x_min, 1.1 * y_min)
+
+    equal_line = numpy.arange(plt_min, plt_max, (plt_max - plt_min) / 100.)
+    plt.plot(equal_line, equal_line, "--")
+
+    if parameter.startswith("mass1") or parameter.startswith("mass2"):
+        plt.hlines([60, 130], [plt_min, plt_min], plt_max, "r",
+                   linestyle="dashed")
+
+    plt.ylabel("recovered " + parameter )
+    plt.xlabel("injected " + parameter)
+    plt.ylim(plt_min, plt_max)
+    plt.xlim(plt_min, plt_max)
+    plt.grid()
+    cbar = plt.colorbar()
+    cbar.set_label("Median SNR")
+    plt.savefig(opts.output_dir + "/" + parameter + "_recovery.png")
+    plt.close()
+
