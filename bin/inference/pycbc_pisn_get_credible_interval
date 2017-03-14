@@ -80,7 +80,8 @@ for i, input_file in enumerate(opts.input_files):
     try:
         fp = io.InferenceFile(input_file, "r")
         for parameter in ["mchirp", "q", "spin1z", "spin2z", "redshift",
-                          "distance"]:
+                          "distance", "inclination", "polarization",
+                          "ra", "dec", "coa_phase", "tc"]:
             data[parameter] = fp.read_samples(
                                 parameter,
                                 iteration=opts.iteration,
