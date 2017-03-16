@@ -38,6 +38,7 @@ parser.add_argument("--input-file", type=str, required=True,
 # output options
 parser.add_argument("--output-dir", type=str, required=True,
                     help="Path to output plot.")
+parser.add_argument("--threshold", type=float, default=0.0)
 
 # parse the command line
 opts = parser.parse_args()
@@ -56,9 +57,14 @@ n_injections = len(injected)
 # plot mchirp, mass1, mass2
 for parameter in ["mchirp_src", "mass1_src", "mass2_src", "mchirp", "q",
                   "mass1", "mass2", "distance", "redshift",
-                  "chi_eff", "spin1z", "spin2z"]:
+                  "chi_eff", "spin1z", "spin2z", "inclination",
+                  "coa_phase", "polarization"]:
 
     for interval, inject in zip(intervals, injected):
+
+        if abs((interval["mchirp_src_med"] - inject["mchirp_src"]) / inject["mchirp_src"]) < opts.threshold:
+            continue
+
         plt.errorbar([inject[parameter]],
                      [interval[parameter + "_med"]],
                      yerr=[[interval[parameter + "_med"] - interval[parameter + "_low"]],
