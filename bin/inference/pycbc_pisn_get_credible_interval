@@ -102,8 +102,6 @@ for i, input_file in enumerate(opts.input_files):
             continue
         continue
 
-    data["input_file"] = input_file
-
     data["mass1"], data["mass2"] = pnutils.mchirp_q_to_mass1_mass2(data["mchirp"], data["q"])
 
     data["mchirp_src"] = data["mchirp"] / (1 + data["redshift"])
@@ -137,7 +135,10 @@ for i, input_file in enumerate(opts.input_files):
         injected["chi_eff"] = (injected["spin1z"] * injected["mass1_src"] + injected["spin2z"] * injected["mass2_src"]) / (injected["mass1_src"] + injected["mass2_src"])
         injected["q"] = conversions.q_from_mass1_mass2(injected["mass1"], injected["mass2"])
 
+        injected["input_file"] = input_file
+
         break
+
 
     results_intervals.append(intervals)
     results_injected.append(injected)
