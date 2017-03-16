@@ -102,6 +102,8 @@ for i, input_file in enumerate(opts.input_files):
             continue
         continue
 
+    data["input_file"] = input_file
+
     data["mass1"], data["mass2"] = pnutils.mchirp_q_to_mass1_mass2(data["mchirp"], data["q"])
 
     data["mchirp_src"] = data["mchirp"] / (1 + data["redshift"])
