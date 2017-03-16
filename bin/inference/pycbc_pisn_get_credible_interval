@@ -72,7 +72,7 @@ for i, input_file in enumerate(opts.input_files):
         continue
 
     if len(os.path.dirname(input_file)):
-        injection_file = "os.path.dirname(input_file)" + "/" + "injection_" + tag + "_det.xml.gz"
+        injection_file = os.path.dirname(input_file) + "/" + "injection_" + tag + "_det.xml.gz"
     else:
         injection_file = "injection_" + tag + "_det.xml.gz"
 
