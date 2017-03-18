@@ -63,16 +63,22 @@ for parameter in ["mchirp_src", "mass1_src", "mass2_src", "mchirp", "q",
     for interval, inject in zip(intervals, injected):
 
         if abs((interval["mchirp_src_med"] - inject["mchirp_src"]) / inject["mchirp_src"]) < opts.threshold:
-            continue
+            color = "r"
+            alpha = 0.2
+            zorder = 10
+        else:
+            color = "k"
+            alpha = 1.0
+            zorder = 20
 
         plt.errorbar([inject[parameter]],
                      [interval[parameter + "_med"]],
                      yerr=[[interval[parameter + "_med"] - interval[parameter + "_low"]],
                            [interval[parameter + "_high"] - interval[parameter + "_med"]]],
-                     c="black", zorder=1)
+                     c=color, zorder=zorder, alpha=alpha)
         plt.scatter(inject[parameter], interval[parameter + "_med"],
                     c=interval["snr_med"], cmap=plt.get_cmap("afmhot_r"),
-                    vmin=0, vmax=30, zorder=2)
+                    vmin=0, vmax=30, zorder=zorder + 1, alpha=alpha)
 
     # get min and max for plotting
     y_max = numpy.array([intervals[i][parameter + "_high"] for i in range(n_injections)]).max()
