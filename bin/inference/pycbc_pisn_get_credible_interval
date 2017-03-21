@@ -49,6 +49,7 @@ parser.add_argument("--iteration", type=int, default=None)
 parser.add_argument("--thin-start", type=int, default=None)
 parser.add_argument("--thin-end", type=int, default=None)
 parser.add_argument("--thin-interval", type=int, default=None)
+parser.add_argument("--skip-inclination", type="store_true")
 
 # output options
 parser.add_argument("--output-file", type=str, required=True,
@@ -81,12 +82,15 @@ for i, input_file in enumerate(opts.input_files):
         logging.info("Injection file %s is not well formed", injection_file)
         continue
 
+    parameters = ["mchirp", "q", "spin1z", "spin2z", "redshift",
+                  "distance", "polarization",
+                  "coa_phase", "tc"]
+    parameters = parameters if opts.skip_inclination else parameters + ["inclination"]
+
     data = {}
     try:
         fp = io.InferenceFile(input_file, "r")
-        for parameter in ["mchirp", "q", "spin1z", "spin2z", "redshift",
-                          "distance", "inclination", "polarization",
-                          "coa_phase", "tc"]:
+        for parameter in parameters:
             data[parameter] = fp.read_samples(
                                 parameter,
                                 iteration=opts.iteration,
