@@ -41,9 +41,8 @@ parser = argparse.ArgumentParser()
 # add command line options
 parser.add_argument("--input-files", nargs="+", type=str, required=True)
 parser.add_argument("--output-file", type=str, required=True)
-parser.add_argument("--src", action="store_true")
-parser.add_argument("--min-mchirp", type=float, default=None)
-parser.add_argument("--max-mchirp", type=float, default=None)
+parser.add_argument("--x", type=str, required=True)
+parser.add_argument("--y", type=str, required=True)
 
 # parse command line
 opts = parser.parse_args()
@@ -59,33 +58,9 @@ for input_file in opts.input_files:
         injections.append(sim)
 
 for sim in injections:
-    x = sim.mass1
-    y = sim.mass2
-    redshift = sim.alpha3
-    x = x / (1 + redshift) if opts.src else x
-    y = y / (1 + redshift) if opts.src else y
+    x = getattr(sim, opts.x)
+    y = getattr(sim, opts.y)
     plt.scatter(x, y)
-
-plt_min = 0
-plt_max = 180
-plt.hlines([60, 130], [plt_min, plt_min], plt_max, "r",
-           linestyle="dashed")
-plt.vlines([60, 130], [plt_min, plt_min], plt_max, "r",
-           linestyle="dashed")
-
-step = 1
-q = numpy.arange(1, 8 + step, step)
-if opts.max_mchirp:
-    mass1 = conversions.mass1_from_mchirp_q([opts.max_mchirp] * len(q), q)
-    mass2 = conversions.mass2_from_mchirp_q([opts.max_mchirp] * len(q), q)
-    plt.plot(mass1, mass2)
-if opts.min_mchirp:
-    mass1 = conversions.mass1_from_mchirp_q([opts.min_mchirp] * len(q), q)
-    mass2 = conversions.mass2_from_mchirp_q([opts.min_mchirp] * len(q), q)
-    plt.plot(mass1, mass2)
-
-plt.xlim(plt_min, plt_max)
-plt.ylim(plt_min, plt_max)
 
 plt.savefig(opts.output_file)
 
