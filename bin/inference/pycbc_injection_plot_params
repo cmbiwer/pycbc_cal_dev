@@ -1,0 +1,93 @@
+#!/usr/bin/python
+
+# Copyright (C) 2017 Christopher M. Biwer
+#
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+# option) any later version.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General
+# Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+
+import argparse
+import logging
+import matplotlib.pyplot as plt
+import numpy
+import os, sys
+from glue.ligolw import ligolw, lsctables, table, utils
+import pycbc
+from pycbc import cosmology
+from pycbc import pnutils
+from pycbc.inference import prior
+from pycbc.inject import InjectionSet, legacy_approximant_name
+from pycbc.types import TimeSeries
+from pycbc.waveform import get_td_waveform
+from pycbc import conversions
+
+class DefaultContentHandler(ligolw.LIGOLWContentHandler):
+    pass
+lsctables.use_in(DefaultContentHandler)
+
+# command line usage
+parser = argparse.ArgumentParser()
+
+# add command line options
+parser.add_argument("--input-files", nargs="+", type=str, required=True)
+parser.add_argument("--output-file", type=str, required=True)
+parser.add_argument("--src", action="store_true")
+parser.add_argument("--min-mchirp", type=float, default=None)
+parser.add_argument("--max-mchirp", type=float, default=None)
+
+# parse command line
+opts = parser.parse_args()
+
+# setup log
+pycbc.init_logging()
+
+injections = []
+
+for input_file in opts.input_files:
+    injection_set = InjectionSet(input_file)
+    for sim in injection_set.table:
+        injections.append(sim)
+
+for sim in injections:
+    x = sim.mass1
+    y = sim.mass2
+    redshift = sim.alpha3
+    x = x / (1 + redshift) if opts.src else x
+    y = y / (1 + redshift) if opts.src else y
+    plt.scatter(x, y)
+
+plt_min = 0
+plt_max = 180
+plt.hlines([60, 130], [plt_min, plt_min], plt_max, "r",
+           linestyle="dashed")
+plt.vlines([60, 130], [plt_min, plt_min], plt_max, "r",
+           linestyle="dashed")
+
+step = 1
+q = numpy.arange(1, 8 + step, step)
+if opts.max_mchirp:
+    mass1 = conversions.mass1_from_mchirp_q([opts.max_mchirp] * len(q), q)
+    mass2 = conversions.mass2_from_mchirp_q([opts.max_mchirp] * len(q), q)
+    plt.plot(mass1, mass2)
+if opts.min_mchirp:
+    mass1 = conversions.mass1_from_mchirp_q([opts.min_mchirp] * len(q), q)
+    mass2 = conversions.mass2_from_mchirp_q([opts.min_mchirp] * len(q), q)
+    plt.plot(mass1, mass2)
+
+plt.xlim(plt_min, plt_max)
+plt.ylim(plt_min, plt_max)
+
+plt.savefig(opts.output_file)
+
+# finish
+logging.info("Done")

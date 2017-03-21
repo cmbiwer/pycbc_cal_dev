@@ -39,6 +39,10 @@ parser = argparse.ArgumentParser()
 # add command line options
 parser.add_argument('--input-file', type=str, required=True)
 parser.add_argument('--output-file', type=str, required=True)
+parser.add_argument('--max-total-mass', type=float, default=500)
+parser.add_argument('--min-mchirp', type=float, default=1)
+parser.add_argument('--max-mchirp', type=float, default=500)
+parser.add_argument("--max-q", type=float, default=500)
 
 # parse command line
 opts = parser.parse_args()
@@ -72,13 +76,22 @@ for sim in injections.table:
 
     params = {
         "mchirp" : sim.mchirp,
-        "q" : sim.mass1 / sim.mass2,
+        "q" : float(sim.mass1) / sim.mass2,
         "spin1z" : sim.spin1z,
         "spin2z" : sim.spin2z,
         "mass1" : sim.mass1,
         "mass2" : sim.mass2,
     }
     if prior.cut(params):
+        continue
+
+    if sim.mass1 / (1 + redshift) + sim.mass2 / (1 + redshift) > opts.max_total_mass:
+        continue
+
+    if sim.mchirp / (1 + redshift) < opts.min_mchirp or sim.mchirp / (1 + redshift) > opts.max_mchirp:
+        continue
+
+    if sim.mass1 / sim.mass2 > opts.max_q:
         continue
 
     sim_table.append(sim)

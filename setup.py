@@ -453,6 +453,7 @@ setup (
                'bin/inference/pycbc_inference_table_summary',
                'bin/inference/pycbc_inspinj',
                'bin/inference/pycbc_injection_apply_cosmology',
+               'bin/inference/pycbc_injection_plot_params',
                'bin/plotting/pycbc_plot_waveform',
                'bin/plotting/pycbc_banksim_plot_eff_fitting_factor',
                'bin/plotting/pycbc_banksim_table_point_injs',
