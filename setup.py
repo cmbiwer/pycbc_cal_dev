@@ -438,6 +438,8 @@ setup (
                'bin/workflows/pycbc_make_inference_workflow',
                'bin/inference/pycbc_pisn_get_credible_interval',
                'bin/inference/pycbc_pisn_plot_recovery',
+               'bin/inference/pycbc_pisn_plot_mass_space',
+               'bin/inference/pycbc_make_inference_workflow',
                'bin/inference/pycbc_inference',
                'bin/inference/pycbc_inference_plot_acceptance_rate',
                'bin/inference/pycbc_inference_plot_acf',
