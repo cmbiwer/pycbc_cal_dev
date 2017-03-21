@@ -49,7 +49,7 @@ parser.add_argument("--iteration", type=int, default=None)
 parser.add_argument("--thin-start", type=int, default=None)
 parser.add_argument("--thin-end", type=int, default=None)
 parser.add_argument("--thin-interval", type=int, default=None)
-parser.add_argument("--skip-inclination", type="store_true")
+parser.add_argument("--skip-inclination", action="store_true")
 
 # output options
 parser.add_argument("--output-file", type=str, required=True,
