@@ -1,0 +1,91 @@
+#!/usr/bin/python
+
+# Copyright (C) 2017 Christopher M. Biwer
+#
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+# option) any later version.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General
+# Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+
+import argparse
+import logging
+import numpy
+import os, sys
+from glue.ligolw import ligolw, lsctables, table, utils
+import pycbc
+from pycbc import cosmology
+from pycbc import pnutils
+from pycbc.inference import prior
+from pycbc.inject import InjectionSet, legacy_approximant_name
+from pycbc.types import TimeSeries
+from pycbc.waveform import get_td_waveform
+
+class DefaultContentHandler(ligolw.LIGOLWContentHandler):
+    pass
+lsctables.use_in(DefaultContentHandler)
+
+# command line usage
+parser = argparse.ArgumentParser()
+
+# add command line options
+parser.add_argument('--input-file', type=str, required=True)
+parser.add_argument('--output-file', type=str, required=True)
+
+# parse command line
+opts = parser.parse_args()
+
+# setup log
+pycbc.init_logging()
+
+# read in injection LIGOLW XML file
+logging.info('Reading injection file')
+injections = InjectionSet(opts.input_file)
+
+# create output file
+logging.info('Creating XML file')
+outdoc = ligolw.Document()
+outdoc.appendChild(ligolw.LIGO_LW())
+
+# create sim_inspiral table
+sim_table = lsctables.New(lsctables.SimInspiralTable,
+                          columns=lsctables.SimInspiralTable.validcolumns)
+outdoc.childNodes[0].appendChild(sim_table)
+
+# loop over rows in sim_inspiral table
+for sim in injections.table:
+
+#    sim.distance *= (1 + redshift)
+    sim.mass1 *= (1 + redshift)
+    sim.mass2 *= (1 + redshift)
+    sim.mchirp, sim.eta = pnutils.mass1_mass2_to_mchirp_eta(sim.mass1, sim.mass2)
+    redshift = cosmology.redshift(sim.distance)
+    sim.alpha3 = redshift
+
+    params = {
+        "mchirp" : sim.mchirp,
+        "q" : sim.mass1 / sim.mass2,
+        "spin1z" : sim.spin1z,
+        "spin2z" : sim.spin2z,
+        "mass1" : sim.mass1,
+        "mass2" : sim.mass2,
+    }
+    if prior.cut(params):
+        continue
+
+    sim_table.append(sim)
+
+# write
+if len(sim_table):
+    utils.write_filename(outdoc, opts.output_file, gz=opts.output_file.endswith('gz'))
+
+# finish
+logging.info('Done')
