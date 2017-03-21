@@ -1,0 +1,68 @@
+#!/usr/bin/python
+
+# Copyright (C) 2017 Christopher M. Biwer
+#
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+# option) any later version.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General
+# Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+
+import argparse
+import logging
+import matplotlib.pyplot as plt
+import numpy
+import os, sys
+from glue.ligolw import ligolw, lsctables, table, utils
+import pycbc
+from pycbc import cosmology
+from pycbc import pnutils
+from pycbc.inference import prior
+from pycbc.inject import InjectionSet, legacy_approximant_name
+from pycbc.types import TimeSeries
+from pycbc.waveform import get_td_waveform
+from pycbc import conversions
+
+class DefaultContentHandler(ligolw.LIGOLWContentHandler):
+    pass
+lsctables.use_in(DefaultContentHandler)
+
+# command line usage
+parser = argparse.ArgumentParser()
+
+# add command line options
+parser.add_argument("--input-files", nargs="+", type=str, required=True)
+parser.add_argument("--output-file", type=str, required=True)
+parser.add_argument("--parameter", type=str, required=True)
+
+# parse command line
+opts = parser.parse_args()
+
+# setup log
+pycbc.init_logging()
+
+injections = []
+
+for input_file in opts.input_files:
+    injection_set = InjectionSet(input_file)
+    for sim in injection_set.table:
+        injections.append(sim)
+
+x = []
+for sim in injections:
+    x.append(getattr(sim, opts.parameter))
+
+plt.hist(x, bins=20, cumulative=True, histtype="step")
+
+plt.savefig(opts.output_file)
+
+# finish
+logging.info("Done")

@@ -455,6 +455,7 @@ setup (
                'bin/inference/pycbc_injection_apply_cosmology',
                'bin/inference/pycbc_injection_plot_params',
                'bin/inference/pycbc_injection_plot_mass_space',
+               'bin/inference/pycbc_injection_plot_cdf',
                'bin/plotting/pycbc_plot_waveform',
                'bin/plotting/pycbc_banksim_plot_eff_fitting_factor',
                'bin/plotting/pycbc_banksim_table_point_injs',
