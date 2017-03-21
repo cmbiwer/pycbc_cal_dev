@@ -76,6 +76,10 @@ for i, input_file in enumerate(opts.input_files):
     else:
         injection_file = "injection_" + tag + "_det.xml.gz"
 
+    injections = inject.InjectionSet(injection_file)
+    if len(injections.table) != 1:
+        logging.info("Injection file %s is not well formed", injection_file)
+
     data = {}
     try:
         fp = io.InferenceFile(input_file, "r")
@@ -119,7 +123,6 @@ for i, input_file in enumerate(opts.input_files):
         intervals[name + "_high"] = high
 
     injected = {}
-    injections = inject.InjectionSet(injection_file)
     for sim in injections.table:
         for parameter in ["mchirp", "mass1", "mass2", "spin1z", "spin2z",
                           "inclination", "polarization", "coa_phase"]:
