@@ -79,6 +79,7 @@ for i, input_file in enumerate(opts.input_files):
     injections = inject.InjectionSet(injection_file)
     if len(injections.table) != 1:
         logging.info("Injection file %s is not well formed", injection_file)
+        continue
 
     data = {}
     try:
