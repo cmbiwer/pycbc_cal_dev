@@ -1,0 +1,42 @@
+#! /usr/bin/env python
+
+import argparse
+import logging
+import matplotlib as mpl#; mpl.use("Agg")
+import matplotlib.pyplot as plt
+import numpy
+import pickle
+import pycbc
+from pycbc import conversions
+
+# command line usage
+parser = argparse.ArgumentParser(usage=__file__ + " [--options]",
+                                 description=__doc__)
+
+# input options
+parser.add_argument("--input-file", type=str, required=True,
+                    help="Input file.")
+
+# output options
+parser.add_argument("--threshold", type=float, default=0.0)
+
+# parse the command line
+opts = parser.parse_args()
+
+# get data from pickle
+intervals, injected =  pickle.load(open(opts.input_file, "r"))
+total = 0
+for interval, inject in zip(intervals, injected):
+
+#    if abs((interval["mchirp_src_med"] - inject["mchirp_src"]) / inject["mchirp_src"]) < opts.threshold:
+#        continue
+
+    if abs((interval["inclination_med"] - inject["inclination"]) / inject["inclination"]) > opts.threshold:
+        continue
+    if inject["inclination"] < 1.0 or inject["inclination"] > 2.0:
+        continue
+
+    print inject["input_file"]
+    total += 1
+
+print total
