@@ -1,0 +1,55 @@
+#! /usr/bin/env python
+
+import argparse
+import numpy
+import sys
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+
+# command line usage
+parser = argparse.ArgumentParser(usage=__file__ + " [--options]",
+                                 description=__doc__)
+parser.add_argument("--aligo-psd-file", type=str, required=True)
+parser.add_argument("--avirgo-psd-file", type=str, required=True)
+parser.add_argument("--output-file", type=str, required=True)
+opts = parser.parse_args()
+
+# set figure parameters
+rcParams = {
+    "text.usetex": True,
+    "figure.dpi": 600,
+    "font.size": 10,
+    "figure.figsize": (3.375, 2.5),
+    "axes.titlesize": 10,
+    "axes.labelsize": 10,
+    "xtick.labelsize": 8,
+    "ytick.labelsize": 8,
+    "legend.fontsize": 8,
+}
+mpl.rcParams.update(rcParams)
+
+# read in aLIGO PSD
+data1 = numpy.loadtxt(opts.aligo_psd_file)
+freq1 = data1[:,0]
+amp1 = data1[:,1]
+
+# read in aVirgo PSD
+data2 = numpy.loadtxt(opts.avirgo_psd_file)
+freq2 = data2[:,0]
+amp2 = data2[:,1]
+
+# plot
+plt.loglog(freq1, amp1, "-", label="Advanced LIGO")
+plt.loglog(freq2, amp2, "--", label="Advanced Virgo")
+
+# format plot
+plt.subplots_adjust(left=0.3, right=1.0, top=1.0, bottom=0.3)
+plt.grid()
+plt.legend()
+plt.ylim(10**(-24), 10**(-20))
+plt.xlim(10, 2000)
+plt.ylabel(r"Amplitude Spectral Density ($\mathrm{Hz}^{-1/2}$)")
+plt.xlabel(r"Frequency (Hz)")
+
+# save plot
+plt.savefig(opts.output_file, bbox_inches="tight", format="eps")

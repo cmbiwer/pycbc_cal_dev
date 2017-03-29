@@ -1,0 +1,79 @@
+#! /usr/bin/env python
+
+import argparse
+import logging
+import matplotlib as mpl#; mpl.use("Agg")
+import matplotlib.pyplot as plt
+import numpy
+import pickle
+import pycbc
+from pycbc import conversions
+
+# command line usage
+parser = argparse.ArgumentParser(usage=__file__ + " [--options]",
+                                 description=__doc__)
+parser.add_argument("--input-file", type=str, required=True)
+parser.add_argument("--output-file", type=str, required=True)
+parser.add_argument("--threshold", type=float, default=0.0)
+opts = parser.parse_args()
+
+# set figure parameters
+rcParams = {
+    "text.usetex": True,
+    "figure.dpi": 600,
+    "font.size": 10,
+    "figure.figsize": (3.375, 2.5),
+    "axes.titlesize": 10,
+    "axes.labelsize": 10,
+    "xtick.labelsize": 8,
+    "ytick.labelsize": 8,
+    "legend.fontsize": 8,
+}
+mpl.rcParams.update(rcParams)
+
+# get data from pickle
+_, injected =  pickle.load(open(opts.input_file, "r"))
+
+# loop over data
+for inject in injected:
+
+    alpha = 1.0
+    zorder = 20
+
+    # plot
+    plt.scatter(inject["mass1_src"], inject["mass2_src"],
+                c=inject["chi_eff"], cmap=plt.get_cmap("afmhot_r"),
+                s=4, vmin=-1, vmax=1, zorder=zorder, alpha=alpha)
+
+# find min and max
+y_min = 10
+y_max = 70
+x_min = 10
+x_max = 200
+plt_min = min(x_min, y_min)
+plt_max = max(x_max, y_max)
+
+# plot lines
+equal_line = numpy.arange(plt_min, plt_max, (plt_max - plt_min) / 100.)
+plt.plot(equal_line, equal_line, "-", color="gray")
+
+plt.hlines([60, 130], [60, 130], x_max, "r",
+           linestyle="dashed", color="gray")
+plt.vlines([60, 130], [60, 130], y_min, "r",
+           linestyle="dashed", color="gray")
+
+# formatting
+plt.subplots_adjust(left=0.2, right=0.9, top=0.9, bottom=0.2)
+plt.ylabel(r"$m_2^{src}$ (M${}_{\odot}$)")
+plt.xlabel(r"$m_1^{src}$ (M${}_{\odot}$)")
+plt.ylim(y_min, y_max)
+plt.xlim(x_min, x_max)
+plt.grid()
+plt.minorticks_on()
+cbar = plt.colorbar()
+cbar.set_label(r"$\chi_{eff}$")
+
+# save
+plt.savefig(opts.output_file, bbox_inches="tight", format="eps")
+plt.close()
+
