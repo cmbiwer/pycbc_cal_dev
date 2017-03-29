@@ -39,6 +39,14 @@ parser.add_argument("--input-file", type=str, required=True,
 parser.add_argument("--output-dir", type=str, required=True,
                     help="Path to output plot.")
 parser.add_argument("--threshold", type=float, default=0.0)
+parser.add_argument("--parameters", nargs="+",
+                    default=["mchirp_src", "mass1_src", "mass2_src",
+                             "mchirp", "q",
+                             "mass1", "mass2", "distance", "redshift",
+                             "chi_eff", "spin1z", "spin2z", "inclination",
+                             "coa_phase", "polarization"])
+parser.add_argument("--plot-min", type=float, default=None)
+parser.add_argument("--plot-max", type=float, default=None)
 
 # parse the command line
 opts = parser.parse_args()
@@ -54,12 +62,7 @@ for inject in injected:
 # get number of injections
 n_injections = len(injected)
 
-# plot mchirp, mass1, mass2
-for parameter in ["mchirp_src", "mass1_src", "mass2_src", "mchirp", "q",
-                  "mass1", "mass2", "distance", "redshift",
-                  "chi_eff", "spin1z", "spin2z", "inclination",
-                  "coa_phase", "polarization"]:
-
+for parameter in opts.parameters:
 
     for interval, inject in zip(intervals, injected):
 
@@ -86,8 +89,8 @@ for parameter in ["mchirp_src", "mass1_src", "mass2_src", "mchirp", "q",
     y_min = numpy.array([intervals[i][parameter + "_low"] for i in range(n_injections)]).min()
     x_max = numpy.array([injected[i][parameter] for i in range(n_injections)]).max()
     x_min = numpy.array([injected[i][parameter] for i in range(n_injections)]).min()
-    plt_max = max(0.9 * x_max, 1.1 * y_max)
-    plt_min = min(0.9 * x_min, 1.1 * y_min)
+    plt_min = opts.plot_min if opts.plot_min else min(0.9 * x_min, 1.1 * y_min)
+    plt_max = opts.plot_max if opts.plot_max else max(0.9 * x_max, 1.1 * y_max)
 
     equal_line = numpy.arange(plt_min, plt_max, (plt_max - plt_min) / 100.)
     plt.plot(equal_line, equal_line, "--")
