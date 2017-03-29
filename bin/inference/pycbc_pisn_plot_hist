@@ -1,0 +1,62 @@
+#! /usr/bin/env python
+
+# Copyright (C) 2017 Christopher M. Biwer
+#
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+# option) any later version.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General
+# Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+""" Plots the mass range.
+"""
+
+import argparse
+import logging
+import matplotlib as mpl#; mpl.use("Agg")
+import matplotlib.pyplot as plt
+import numpy
+import pickle
+import pycbc
+from pycbc import conversions
+
+# command line usage
+parser = argparse.ArgumentParser(usage=__file__ + " [--options]",
+                                 description=__doc__)
+
+# input options
+parser.add_argument("--input-file", type=str, required=True,
+                    help="Input file.")
+
+# output options
+parser.add_argument("--output-dir", type=str, required=True,
+                    help="Path to output plot.")
+parser.add_argument("--threshold", type=float, default=0.0)
+parser.add_argument("--parameters", nargs="+",
+                    default=["snr_med"])
+parser.add_argument("--plot-min", type=float, default=None)
+parser.add_argument("--plot-max", type=float, default=None)
+
+# parse the command line
+opts = parser.parse_args()
+
+# get data from pickle
+intervals, _ =  pickle.load(open(opts.input_file, "r"))
+
+snrs = []
+for parameter in opts.parameters:
+    for interval in intervals:
+       snrs.append(interval[parameter])
+
+plt.hist(snrs, 20)
+plt.grid()
+plt.savefig(opts.output_dir + "/" + parameter + "_hist.png")
+plt.close()
+

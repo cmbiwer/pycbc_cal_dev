@@ -439,6 +439,7 @@ setup (
                'bin/inference/pycbc_pisn_get_credible_interval',
                'bin/inference/pycbc_pisn_plot_recovery',
                'bin/inference/pycbc_pisn_plot_mass_space',
+               'bin/inference/pycbc_pisn_plot_hist',
                'bin/inference/pycbc_pisn_print_pkl',
                'bin/inference/pycbc_make_inference_workflow',
                'bin/inference/pycbc_inference',
