@@ -60,6 +60,7 @@ for parameter in ["mchirp_src", "mass1_src", "mass2_src", "mchirp", "q",
                   "chi_eff", "spin1z", "spin2z", "inclination",
                   "coa_phase", "polarization"]:
 
+
     for interval, inject in zip(intervals, injected):
 
         if abs((interval["mchirp_src_med"] - inject["mchirp_src"]) / inject["mchirp_src"]) < opts.threshold:

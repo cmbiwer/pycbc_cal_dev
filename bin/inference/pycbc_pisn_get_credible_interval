@@ -50,6 +50,7 @@ parser.add_argument("--thin-start", type=int, default=None)
 parser.add_argument("--thin-end", type=int, default=None)
 parser.add_argument("--thin-interval", type=int, default=None)
 parser.add_argument("--skip-inclination", action="store_true")
+parser.add_argument("--distance-scale", type=float, default=1.0)
 
 # output options
 parser.add_argument("--output-file", type=str, required=True,
@@ -71,6 +72,9 @@ for i, input_file in enumerate(opts.input_files):
     tag = "_".join(input_file.rstrip(".hdf").split("/")[-1].split("_")[1:])
     if tag.endswith("_0"):
         continue
+
+    if len(tag.split("_")) > 2:
+        tag = "_".join(tag.split("_")[:2])
 
     if len(os.path.dirname(input_file)):
         injection_file = os.path.dirname(input_file) + "/" + "injection_" + tag + "_det.xml.gz"
@@ -134,6 +138,8 @@ for i, input_file in enumerate(opts.input_files):
             injected[parameter] = getattr(sim, parameter)
 
         injected["tc"] = sim.geocent_end_time + sim.geocent_end_time_ns * 1e-9
+
+        sim.distance *= opts.distance_scale
 
         injected["distance"] = sim.distance
         injected["redshift"] = cosmology.redshift(sim.distance)
