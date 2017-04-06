@@ -73,6 +73,7 @@ plt.xlabel(r"Median SNR")
 plt.subplots_adjust(left=0.2, right=0.9, top=0.9, bottom=0.2)
 plt.ylim(0, opts.y_max)
 plt.xlim(opts.x_min, opts.x_max)
+plt.minorticks_on()
 plt.grid()
 
 format = "eps" if opts.output_file.endswith(".eps") else None
