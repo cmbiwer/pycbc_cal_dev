@@ -1,0 +1,81 @@
+#! /usr/bin/env python
+
+# Copyright (C) 2017 Christopher M. Biwer
+#
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+# option) any later version.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General
+# Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+""" Plots the mass range.
+"""
+
+import argparse
+import itertools
+import logging
+import matplotlib as mpl#; mpl.use("Agg")
+import matplotlib.pyplot as plt
+import numpy
+import pickle
+import pycbc
+from pycbc import conversions
+
+# command line usage
+parser = argparse.ArgumentParser(usage=__file__ + " [--options]",
+                                 description=__doc__)
+parser.add_argument("--input-files", type=str, nargs="+", required=True)
+parser.add_argument("--output-file", type=str, required=True)
+parser.add_argument("--threshold", type=float, default=0.0)
+parser.add_argument("--x-min", type=float, default=None)
+parser.add_argument("--x-max", type=float, default=None)
+parser.add_argument("--y-max", type=float, default=None)
+
+# parse the command line
+opts = parser.parse_args()
+
+# set figure parameters
+rcParams = {
+    "text.usetex": True,
+    "figure.dpi": 600,
+    "font.size": 10,
+    "figure.figsize": (3.375, 2.5),
+    "axes.titlesize": 10,
+    "axes.labelsize": 10,
+    "xtick.labelsize": 8,
+    "ytick.labelsize": 8,
+    "legend.fontsize": 8,
+}
+mpl.rcParams.update(rcParams)
+
+line_styles = itertools.cycle(["-", "--", "-."])
+
+for input_file in opts.input_files:
+
+    intervals, _ =  pickle.load(open(input_file, "r"))
+
+    snrs = []
+    for interval in intervals:
+        snrs.append(interval["snr_med"])
+
+    plt.hist(snrs, bins=10, histtype="step", zorder=20, linestyle=line_styles.next())
+
+plt.ylabel(r"Counts")
+plt.xlabel(r"Median SNR")
+
+plt.subplots_adjust(left=0.2, right=0.9, top=0.9, bottom=0.2)
+plt.ylim(0, opts.y_max)
+plt.xlim(opts.x_min, opts.x_max)
+plt.grid()
+
+format = "eps" if opts.output_file.endswith(".eps") else None
+plt.savefig(opts.output_file, bbox_inches="tight", format=format)
+plt.close()
+

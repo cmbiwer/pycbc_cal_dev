@@ -110,6 +110,7 @@ plt.xlabel(r"Injected " + y_label)
 plt.ylim(plt_min, plt_max)
 plt.xlim(plt_min, plt_max)
 plt.grid()
+plt.minorticks_on()
 cbar = plt.colorbar()
 cbar.set_label("Median SNR")
 

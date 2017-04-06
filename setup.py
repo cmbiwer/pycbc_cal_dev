@@ -441,6 +441,7 @@ setup (
                'bin/inference/pycbc_pisn_plot_hist',
                'bin/inference/pycbc_pisn_print_pkl',
                'bin/inference/pycbc_pisn_paper_asd',
+               'bin/inference/pycbc_pisn_paper_hist',
                'bin/inference/pycbc_pisn_paper_mass_space',
                'bin/inference/pycbc_pisn_paper_recovery',
                'bin/inference/pycbc_make_inference_workflow',
