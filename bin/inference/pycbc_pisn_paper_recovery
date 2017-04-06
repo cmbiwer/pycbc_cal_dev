@@ -5,6 +5,7 @@
 import argparse
 import logging
 import matplotlib as mpl#; mpl.use("Agg")
+import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 import numpy
 import pickle
@@ -54,35 +55,40 @@ for inject in injected:
 # get number of injections
 n_injections = len(injected)
 
+#cmap_name = "afmhot_r"
+cmap_name = "jet"
+my_cmap = cm.get_cmap(cmap_name)
+norm = mpl.colors.Normalize(0, 35)
+
 parameter = opts.parameter
 
 for interval, inject in zip(intervals, injected):
 
     if abs((interval["mchirp_src_med"] - inject["mchirp_src"]) / inject["mchirp_src"]) < opts.threshold:
-        color = "r"
         alpha = 0.2
         zorder = 10
     else:
-        color = "k"
         alpha = 1.0
         zorder = 20
+
+    color = my_cmap(norm(interval["snr_med"])) # returns an rgba value
 
     plt.errorbar([inject[parameter]],
                  [interval[parameter + "_med"]],
                  yerr=[[interval[parameter + "_med"] - interval[parameter + "_low"]],
                        [interval[parameter + "_high"] - interval[parameter + "_med"]]],
-                 c=color, zorder=zorder, alpha=alpha)
+                 ecolor=color, zorder=zorder, alpha=alpha)
     plt.scatter(inject[parameter], interval[parameter + "_med"],
-                c=interval["snr_med"], cmap=plt.get_cmap("afmhot_r"),
-                vmin=0, vmax=30, zorder=zorder + 1, alpha=alpha)
+                c=interval["snr_med"], cmap=plt.get_cmap(cmap_name),
+                vmin=0, vmax=35, zorder=zorder + 1, alpha=alpha, s=1)
 
 # get min and max for plotting
 y_max = numpy.array([intervals[i][parameter + "_high"] for i in range(n_injections)]).max()
 y_min = numpy.array([intervals[i][parameter + "_low"] for i in range(n_injections)]).min()
 x_max = numpy.array([injected[i][parameter] for i in range(n_injections)]).max()
 x_min = numpy.array([injected[i][parameter] for i in range(n_injections)]).min()
-plt_min = opts.plot_min if opts.plot_min else min(0.9 * x_min, 1.1 * y_min)
-plt_max = opts.plot_max if opts.plot_max else max(0.9 * x_max, 1.1 * y_max)
+plt_min = opts.plot_min if opts.plot_min is not None else min(0.9 * x_min, 1.1 * y_min)
+plt_max = opts.plot_max if opts.plot_max is not None else max(0.9 * x_max, 1.1 * y_max)
 
 equal_line = numpy.arange(plt_min, plt_max, (plt_max - plt_min) / 100.)
 plt.plot(equal_line, equal_line, "--")
@@ -91,13 +97,24 @@ if parameter.startswith("mass1") or parameter.startswith("mass2"):
     plt.hlines([60, 130], [plt_min, plt_min], plt_max, "r",
                linestyle="dashed")
 
-plt.ylabel(r"recovered " + parameter)
-plt.xlabel(r"injected " + parameter)
+if opts.parameter == "mass1_src":
+    y_label = r"$m_1^\mathrm{src}$"
+elif opts.parameter == "mass2_src":
+    y_label = r"$m_2^\mathrm{src}$"
+else:
+    y_label = opts.parameter
+
+plt.subplots_adjust(left=0.2, right=0.9, top=0.9, bottom=0.2)
+plt.ylabel(r"Recovered " + y_label)
+plt.xlabel(r"Injected " + y_label)
 plt.ylim(plt_min, plt_max)
 plt.xlim(plt_min, plt_max)
 plt.grid()
 cbar = plt.colorbar()
 cbar.set_label("Median SNR")
-plt.savefig(opts.output_file)
+
+format = "eps" if opts.output_file.endswith(".eps") else None
+
+plt.savefig(opts.output_file, bbox_inches="tight", format=format)
 plt.close()
 

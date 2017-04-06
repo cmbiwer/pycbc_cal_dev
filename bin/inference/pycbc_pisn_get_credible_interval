@@ -139,7 +139,7 @@ for i, input_file in enumerate(opts.input_files):
 
         injected["tc"] = sim.geocent_end_time + sim.geocent_end_time_ns * 1e-9
 
-        sim.distance *= opts.distance_scale
+#        sim.distance *= opts.distance_scale
 
         injected["distance"] = sim.distance
         injected["redshift"] = cosmology.redshift(sim.distance)
