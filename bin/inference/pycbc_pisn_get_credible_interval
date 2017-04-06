@@ -74,7 +74,7 @@ for i, input_file in enumerate(opts.input_files):
         continue
 
     if len(tag.split("_")) > 2:
-        tag = "_".join(tag.split("_")[:2])
+        tag = "_".join(tag.split("_")[:3])
 
     if len(os.path.dirname(input_file)):
         injection_file = os.path.dirname(input_file) + "/" + "injection_" + tag + "_det.xml.gz"
