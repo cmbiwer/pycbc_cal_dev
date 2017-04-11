@@ -12,7 +12,7 @@ from pycbc import conversions
 # command line usage
 parser = argparse.ArgumentParser(usage=__file__ + " [--options]",
                                  description=__doc__)
-parser.add_argument("--input-file", type=str, required=True)
+parser.add_argument("--input-files", type=str, nargs="+", required=True)
 parser.add_argument("--output-file", type=str, required=True)
 parser.add_argument("--threshold", type=float, default=0.0)
 opts = parser.parse_args()
@@ -32,7 +32,10 @@ rcParams = {
 mpl.rcParams.update(rcParams)
 
 # get data from pickle
-_, injected =  pickle.load(open(opts.input_file, "r"))
+injected = []
+for input_file in opts.input_files:
+    _, injected_i =  pickle.load(open(input_file, "r"))
+    injected.append(injected_i)
 
 # loop over data
 for inject in injected:

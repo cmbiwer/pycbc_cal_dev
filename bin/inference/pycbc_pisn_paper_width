@@ -1,6 +1,4 @@
 #! /usr/bin/env python
-""" Plots the mass range.
-"""
 
 import argparse
 import logging
@@ -15,7 +13,7 @@ from pycbc import conversions
 # command line usage
 parser = argparse.ArgumentParser(usage=__file__ + " [--options]",
                                  description=__doc__)
-parser.add_argument("--input-file", type=str, required=True,
+parser.add_argument("--input-files", type=str, nargs="+", required=True,
                     help="Input file.")
 parser.add_argument("--output-file", type=str, required=True,
                     help="Path to output plot.")
@@ -28,6 +26,7 @@ parser.add_argument("--parameter",
                              "coa_phase", "polarization"])
 parser.add_argument("--plot-min", type=float, default=None)
 parser.add_argument("--plot-max", type=float, default=None)
+parser.add_argument("--plot-gap-only", action="store_true")
 opts = parser.parse_args()
 
 # set figure parameters
@@ -45,7 +44,12 @@ rcParams = {
 mpl.rcParams.update(rcParams)
 
 # get data from pickle
-intervals, injected =  pickle.load(open(opts.input_file, "r"))
+intervals = []
+injected = []
+for input_file in opts.input_files:
+    intervals_i, injected_i =  pickle.load(open(input_file, "r"))
+    intervals += intervals_i
+    injected += injected_i
 
 # add q
 for inject in injected:
@@ -62,6 +66,8 @@ norm = mpl.colors.Normalize(0, 35)
 
 parameter = opts.parameter
 
+widths = []
+
 for interval, inject in zip(intervals, injected):
 
     if abs((interval["mchirp_src_med"] - inject["mchirp_src"]) / inject["mchirp_src"]) < opts.threshold:
@@ -71,30 +77,42 @@ for interval, inject in zip(intervals, injected):
         alpha = 1.0
         zorder = 20
 
-    color = my_cmap(norm(interval["snr_med"])) # returns an rgba value
+    if opts.plot_gap_only:
+        if not (inject["mass1_src"] < 130 and inject["mass1_src"] > 60) and not (inject["mass2_src"] < 130 and inject["mass2_src"] > 60):
+            continue
 
-    plt.errorbar([inject[parameter]],
-                 [interval[parameter + "_med"]],
-                 yerr=[[interval[parameter + "_med"] - interval[parameter + "_low"]],
-                       [interval[parameter + "_high"] - interval[parameter + "_med"]]],
-                 ecolor=color, zorder=zorder, alpha=alpha)
-    plt.scatter(inject[parameter], interval[parameter + "_med"],
-                c=interval["snr_med"], cmap=plt.get_cmap(cmap_name),
-                vmin=0, vmax=35, zorder=zorder + 1, alpha=alpha, s=1)
+    if (inject["mass1_src"] < 130 and inject["mass1_src"] > 60) and (interval["mass1_src_high"] < 130 and interval["mass1_src_low"] > 60):
+        marker = "o"
+        color = None #my_cmap(norm(inject[parameter])) # returns an rgba value
+    elif (inject["mass2_src"] < 130 and inject["mass2_src"] > 60) and (interval["mass2_src_high"] < 130 and interval["mass2_src_low"] > 60):
+        marker = "o"
+        color = None #my_cmap(norm(inject[parameter])) # returns an rgba value
+    else:
+        marker = "x"
+        color = "k"
+
+    width = interval[parameter + "_high"] - interval[parameter + "_low"]
+    widths.append(width)
+    if color:
+        plt.scatter(interval["snr_med"], width, marker=marker,
+                    c=color,
+                    zorder=zorder + 2, alpha=alpha, s=4)
+    else:
+        plt.scatter(interval["snr_med"], width, marker=marker,
+                    c=inject[parameter], cmap=plt.get_cmap(cmap_name),
+                    vmin=0, vmax=130, zorder=zorder + 1, alpha=alpha, s=4)
+
 
 # get min and max for plotting
-y_max = numpy.array([intervals[i][parameter + "_high"] for i in range(n_injections)]).max()
-y_min = numpy.array([intervals[i][parameter + "_low"] for i in range(n_injections)]).min()
-x_max = numpy.array([injected[i][parameter] for i in range(n_injections)]).max()
-x_min = numpy.array([injected[i][parameter] for i in range(n_injections)]).min()
+y_max = numpy.array(widths).max()
+y_min = numpy.array(widths).min()
+x_max = numpy.array([intervals[i]["snr_med"] for i in range(n_injections)]).max()
+x_min = numpy.array([intervals[i]["snr_med"] for i in range(n_injections)]).min()
 plt_min = opts.plot_min if opts.plot_min is not None else min(0.9 * x_min, 1.1 * y_min)
 plt_max = opts.plot_max if opts.plot_max is not None else max(0.9 * x_max, 1.1 * y_max)
 
-equal_line = numpy.arange(plt_min, plt_max, (plt_max - plt_min) / 100.)
-plt.plot(equal_line, equal_line, "--")
-
 if parameter.startswith("mass1") or parameter.startswith("mass2"):
-    plt.hlines([60, 130], [plt_min, plt_min], plt_max, "r",
+    plt.hlines([130 - 60], [plt_min], plt_max, "r",
                linestyle="dashed")
 
 if opts.parameter == "mass1_src":
@@ -104,19 +122,20 @@ elif opts.parameter == "mass2_src":
 elif opts.parameter == "mass1":
     y_label = r"$m_1^\mathrm{det}$"
 elif opts.parameter == "mass2":
-    y_label = r"$m_1^\mathrm{det}$"
+    y_label = r"$m_2^\mathrm{det}$"
 else:
     y_label = opts.parameter
 
 plt.subplots_adjust(left=0.2, right=0.9, top=0.9, bottom=0.2)
-plt.ylabel(r"Recovered " + y_label)
-plt.xlabel(r"Injected " + y_label)
-plt.ylim(plt_min, plt_max)
-plt.xlim(plt_min, plt_max)
+plt.ylabel(r"90\% Credible Interval Width for " + y_label)
+plt.xlabel(r"Median SNR")
+plt.ylim(0, 100)
+#plt.ylim(plt_min, plt_max)
+plt.xlim(0, 35)
 plt.grid()
 plt.minorticks_on()
-cbar = plt.colorbar()
-cbar.set_label("Median SNR")
+#cbar = plt.colorbar()
+#cbar.set_label(r"Injected" + y_label)
 
 format = "eps" if opts.output_file.endswith(".eps") else None
 
