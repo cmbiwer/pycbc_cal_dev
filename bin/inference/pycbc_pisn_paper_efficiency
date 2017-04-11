@@ -1,0 +1,158 @@
+#! /usr/bin/env python
+
+import argparse
+import logging
+import matplotlib as mpl#; mpl.use("Agg")
+import matplotlib.colorbar as cbar
+import matplotlib.cm as cm
+import matplotlib.patches as patches
+import matplotlib.pyplot as plt
+import numpy
+import pickle
+import pycbc
+from pycbc import conversions
+
+# command line usage
+parser = argparse.ArgumentParser(usage=__file__ + " [--options]",
+                                 description=__doc__)
+parser.add_argument("--input-files", type=str, nargs="+", required=True)
+parser.add_argument("--output-file", type=str, required=True)
+parser.add_argument("--threshold", type=float, default=0.0)
+opts = parser.parse_args()
+
+# set figure parameters
+rcParams = {
+    "text.usetex": True,
+    "figure.dpi": 600,
+    "font.size": 10,
+    "figure.figsize": (3.375, 2.5),
+    "axes.titlesize": 10,
+    "axes.labelsize": 10,
+    "xtick.labelsize": 8,
+    "ytick.labelsize": 8,
+    "legend.fontsize": 8,
+}
+mpl.rcParams.update(rcParams)
+
+# get data from pickle
+injected = []
+intervals = []
+for input_file in opts.input_files:
+    interval_i, injected_i =  pickle.load(open(input_file, "r"))
+    injected += injected_i
+    intervals += interval_i
+
+class Inject(object):
+    def __init__(self, mass1_src, mass2_src, chi_eff, found):
+        self.mass1_src = mass1_src
+        self.mass2_src = mass2_src
+        self.chi_eff = chi_eff
+        self.found = found
+
+PISN_LOW = 60
+PISN_HIGH = 130
+
+def in_gap(low, high):
+    if low > PISN_LOW and high < PISN_HIGH:
+        return True
+    else:
+        return False
+
+injects = []
+for interval, inject in zip(intervals, injected):
+
+    found1 = in_gap(interval["mass1_src_low"], interval["mass1_src_high"])
+    found2 = in_gap(interval["mass2_src_low"], interval["mass2_src_high"])
+    found = found1 | found2
+
+    injects.append(Inject(inject["mass1_src"], inject["mass2_src"],
+                          inject["chi_eff"], found))
+
+
+fig1 = plt.figure()
+ax1 = fig1.add_subplot(111)#, aspect='equal')
+
+cmap_name = "jet"
+my_cmap = cm.get_cmap(cmap_name)
+norm = mpl.colors.Normalize(0, 1)
+
+step = 10
+x_range = numpy.arange(step, 200 + step, step)
+y_range = numpy.arange(step, 200 + step, step)
+
+efficiency = numpy.zeros((len(x_range), len(y_range)))
+counts = numpy.zeros((len(x_range), len(y_range)))
+for inject in injects:
+
+    i = inject.mass1_src - inject.mass1_src % step
+    j = inject.mass2_src - inject.mass2_src % step
+
+    idx_i = numpy.where(x_range == i)[0]
+    idx_j = numpy.where(y_range == j)[0]
+
+    counts[idx_i, idx_j] += 1
+
+    if inject.found:
+        efficiency[idx_i, idx_j] += 1
+
+efficiency /= counts
+
+for x in x_range:
+    for y in y_range:
+
+        if (x >= PISN_HIGH or x < PISN_LOW) and (y >= PISN_HIGH or y < PISN_LOW):
+            continue
+
+        if y > x:
+            continue
+
+        idx_i = numpy.where(x_range == x)[0]
+        idx_j = numpy.where(y_range == y)[0]
+
+        if counts[idx_i, idx_j] < 1:
+            color = "white"
+        else:
+            color = my_cmap(norm(efficiency[idx_i, idx_j]))[0]
+
+        if efficiency[idx_i, idx_j] == 1.0:
+           hatch = None
+        else:
+           hatch = None
+
+        ax1.add_patch(patches.Rectangle((x, y), step, step, color=color, hatch=hatch))
+
+plt_min = 0
+plt_max = 250
+x_min = 10
+y_min = 10
+x_max = 200
+y_max = 70
+
+# plot lines
+equal_line = numpy.arange(plt_min, plt_max, (plt_max - plt_min) / 100.)
+plt.plot(equal_line, equal_line, "-", color="gray")
+
+plt.hlines([60, 130], [60, 130], x_max, "r",
+           linestyle="dashed", color="gray")
+plt.vlines([60, 130], [60, 130], y_min, "r",
+           linestyle="dashed", color="gray")
+
+# formatting
+plt.subplots_adjust(left=0.2, right=0.9, top=0.9, bottom=0.2)
+plt.ylabel(r"$m_2^{src}$ (M${}_{\odot}$)")
+plt.xlabel(r"$m_1^{src}$ (M${}_{\odot}$)")
+plt.ylim(y_min, y_max)
+plt.xlim(x_min, x_max)
+plt.grid()
+plt.minorticks_on()
+
+cax, _ = cbar.make_axes(ax1) 
+cb2 = cbar.ColorbarBase(cax, cmap=cm.jet, norm=norm) 
+#cbar = plt.colorbar()
+cb2.set_label(r"$\xi$")
+
+form = "eps" if opts.output_file.endswith(".eps") else None
+
+plt.savefig(opts.output_file, bbox_inches="tight", format=form)
+plt.close()
+

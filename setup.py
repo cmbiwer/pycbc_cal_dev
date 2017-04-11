@@ -445,6 +445,7 @@ setup (
                'bin/inference/pycbc_pisn_paper_mass_space',
                'bin/inference/pycbc_pisn_paper_recovery',
                'bin/inference/pycbc_pisn_paper_width',
+               'bin/inference/pycbc_pisn_paper_efficiency',
                'bin/inference/pycbc_make_inference_workflow',
                'bin/inference/pycbc_inference',
                'bin/inference/pycbc_inference_plot_acceptance_rate',
