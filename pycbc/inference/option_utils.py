@@ -21,6 +21,7 @@ import logging
 from pycbc.io import InferenceFile
 import pycbc.inference.sampler
 from pycbc.inference import likelihood
+from pycbc.inference import trans
 from pycbc.pool import choose_pool
 from pycbc.psd import from_cli_multi_ifos as psd_from_cli_multi_ifos
 from pycbc.strain import from_cli_multi_ifos as strain_from_cli_multi_ifos
@@ -337,8 +338,12 @@ def results_from_cli(opts, load_samples=True, walkers=None):
             thin_end=opts.thin_end, iteration=opts.iteration)
     else:
         samples = None
+    samples = add_base_parameters(parameters, labels, samples)
     return fp, parameters, labels, samples
 
+
+def add_base_parameters(parameters, labels, samples):
+    return trans.convert(samples)
 
 def get_zvalues(fp, arg, likelihood_stats):
     """Reads the data for the z-value of the plots from the inference file.
