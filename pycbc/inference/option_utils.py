@@ -318,10 +318,12 @@ def results_from_cli(opts, load_samples=True, walkers=None):
     samples : {None, WaveformArray}
         If load_samples, the samples as a WaveformArray; otherwise, None.
     """
+
     logging.info("Reading input file")
     fp = InferenceFile(opts.input_file, "r")
     parameters = fp.variable_args if opts.parameters is None \
                  else opts.parameters
+
     # load the labels
     labels = []
     for ii,p in enumerate(parameters):
@@ -331,6 +333,8 @@ def results_from_cli(opts, load_samples=True, walkers=None):
         else:
             label = fp.read_label(p)
         labels.append(label)
+
+    # load the samples
     if load_samples:
         logging.info("Loading samples")
         samples = fp.read_samples(parameters, walkers=walkers,
@@ -338,11 +342,27 @@ def results_from_cli(opts, load_samples=True, walkers=None):
             thin_end=opts.thin_end, iteration=opts.iteration)
     else:
         samples = None
-    samples = add_base_parameters(parameters, labels, samples)
+
+    # add a set of base parameters if they are not included in InferenceFile
+    samples = add_base_parameters(samples)
+
     return fp, parameters, labels, samples
 
 
-def add_base_parameters(parameters, labels, samples):
+def add_base_parameters(samples):
+    """ Adds a standard set of base parameters to the WaveformArray for
+    plotting. For set of base parameters see pycbc.inference.trans module.
+
+    Parameters
+    ----------
+    samples : WaveformArray
+        WaveformArray to add new fields.
+
+    Returns
+    -------
+    WaveformArray
+       WaveformArray with new fields.
+    """
     return trans.convert(samples)
 
 def get_zvalues(fp, arg, likelihood_stats):
