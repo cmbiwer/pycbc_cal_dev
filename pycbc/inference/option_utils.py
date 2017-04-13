@@ -21,7 +21,7 @@ import logging
 from pycbc.io import InferenceFile
 import pycbc.inference.sampler
 from pycbc.inference import likelihood
-from pycbc.inference import trans
+from pycbc.inference import sampling_conversions
 from pycbc.pool import choose_pool
 from pycbc.psd import from_cli_multi_ifos as psd_from_cli_multi_ifos
 from pycbc.strain import from_cli_multi_ifos as strain_from_cli_multi_ifos
@@ -344,7 +344,7 @@ def results_from_cli(opts, load_samples=True, walkers=None):
         samples = None
 
     # add a set of base parameters if they are not included in InferenceFile
-    samples = trans.add_base_parameters(samples)
+    samples = sampling_conversions.add_base_parameters(samples)
 
     return fp, parameters, labels, samples
 
