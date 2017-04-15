@@ -440,10 +440,14 @@ def results_from_cli(opts, load_samples=True, walkers=None):
     # load the samples
     if load_samples:
         logging.info("Loading samples")
-        samples = fp.read_samples(parameters, walkers=walkers,
+        # check if need extra parameters for a derived parameter
+        file_parameters = sampling_conversions.get_parameters_set(
+                                                 parameters, fp.variable_args)
+        # read samples from file
+        samples = fp.read_samples(file_parameters, walkers=walkers,
             thin_start=opts.thin_start, thin_interval=opts.thin_interval,
             thin_end=opts.thin_end, iteration=opts.iteration)
-        # add a set of base parameters if they are not included in InferenceFile
+        # add a set of base parameters if not included in InferenceFile
         samples = sampling_conversions.add_base_parameters(samples)
     else:
         samples = None
