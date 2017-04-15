@@ -443,11 +443,10 @@ def results_from_cli(opts, load_samples=True, walkers=None):
         samples = fp.read_samples(parameters, walkers=walkers,
             thin_start=opts.thin_start, thin_interval=opts.thin_interval,
             thin_end=opts.thin_end, iteration=opts.iteration)
+        # add a set of base parameters if they are not included in InferenceFile
+        samples = sampling_conversions.add_base_parameters(samples)
     else:
         samples = None
-
-    # add a set of base parameters if they are not included in InferenceFile
-    samples = sampling_conversions.add_base_parameters(samples)
 
     return fp, parameters, labels, samples
 
