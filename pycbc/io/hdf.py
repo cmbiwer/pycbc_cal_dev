@@ -878,7 +878,7 @@ def insert_bank_bins_option_group(parser):
     """
     bins_group = parser.add_argument_group(
                                  "Options for selecting templates in bins.")
-    bins_group.add_argument("--template-bins", nargs="+", default=None,
+    bins_group.add_argument("--bank-bins", nargs="+", default=None,
                             help="Ordered list of mass bin upper boundaries. "
                                  "An ordered list of type-boundary pairs, "
                                  "applied sequentially. Must provide a name "
