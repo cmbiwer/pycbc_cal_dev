@@ -29,6 +29,7 @@ from pycbc.distributions.uniform import *
 distribs = {
     FromFile.name : FromFile,
     Gaussian.name : Gaussian,
+    UniformPowerLaw.name : UniformPowerLaw,
     UniformRadius.name : UniformRadius,
     Uniform.name : Uniform,
     UniformAngle.name : UniformAngle,
