@@ -15,7 +15,11 @@
                     {% if path_exists('{% endraw %}{{dir}}/{{filelist[0].name}}{% raw %}') %}
                         {% set cp = get_embedded_config('{% endraw %}{{dir}}/{{filelist[0].name}}{% raw %}') %}
                             {% if cp.has_option('{% endraw %}{{filelist[0].name}}{% raw %}', 'title') %}
-                                <p class="text-center" style="font-size:18px;"><b>{% endraw %}A{{i}}. {% raw %}{{cp.get('{% endraw %}{{filelist[0].name}}{% raw %}', 'title')}}</b></p>
+                                <p class="text-center" style="font-size:18px;">
+                                     <a href="#A{{i}}">
+                                     <b>{% endraw %}A{{i}}. {% raw %}{{cp.get('{% endraw %}{{filelist[0].name}}{% raw %}', 'title')}}</b>
+                                     </a>
+                                </p>
                             {% endif %}
                             {{ setup_template_render('{% endraw %}{{dir}}/{{filelist[0].name}}{% raw %}' , '') }}
                     {% endif %}
