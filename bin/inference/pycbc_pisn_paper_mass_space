@@ -20,7 +20,7 @@ opts = parser.parse_args()
 # set figure parameters
 rcParams = {
     "text.usetex": True,
-    "figure.dpi": 600,
+    "figure.dpi": 520,
     "font.size": 10,
     "figure.figsize": (3.375, 2.5),
     "axes.titlesize": 10,
@@ -31,50 +31,62 @@ rcParams = {
 }
 mpl.rcParams.update(rcParams)
 
+# create figure
+fig, ax = plt.subplots()
+
 # get data from pickle
 injected = []
 for input_file in opts.input_files:
     _, injected_i =  pickle.load(open(input_file, "r"))
-    injected.append(injected_i)
+    injected += injected_i
 
-# loop over data
+# loop over data and plot
 for inject in injected:
-
     alpha = 1.0
     zorder = 20
-
-    # plot
-    plt.scatter(inject["mass1_src"], inject["mass2_src"],
-                c=inject["chi_eff"], cmap=plt.get_cmap("afmhot_r"),
-                s=4, vmin=-1, vmax=1, zorder=zorder, alpha=alpha)
+    cs = ax.scatter(inject["mass1_src"], inject["mass2_src"],
+                    c=inject["chi_eff"], cmap=plt.get_cmap("afmhot_r"),
+                    s=4, vmin=-1, vmax=1, zorder=zorder, alpha=alpha)
 
 # find min and max
-y_min = 10
-y_max = 70
-x_min = 10
-x_max = 200
+y_min = 0
+y_max = 140
+x_min = 0
+x_max = 350
 plt_min = min(x_min, y_min)
 plt_max = max(x_max, y_max)
+
+# set ticks
+n = 7
+step = float(y_max - y_min) / n
+ax.yaxis.set_ticks(numpy.arange(y_min, y_max + step, step))
+step = float(x_max - x_min) / n
+ax.xaxis.set_ticks(numpy.arange(x_min, x_max + step, step))
 
 # plot lines
 equal_line = numpy.arange(plt_min, plt_max, (plt_max - plt_min) / 100.)
 plt.plot(equal_line, equal_line, "-", color="gray")
 
-plt.hlines([60, 130], [60, 130], x_max, "r",
-           linestyle="dashed", color="gray")
-plt.vlines([60, 130], [60, 130], y_min, "r",
-           linestyle="dashed", color="gray")
+ax.hlines([52, 130], [52, 130], x_max, "r",
+          linestyle="dashed", color="gray")
+ax.vlines([52, 130], [52, 130], y_min, "r",
+          linestyle="dashed", color="gray")
+
+# add gray area for invalid region
+tri = plt.Polygon([[plt_min, plt_min], [plt_max, plt_max], [plt_min, plt_max]],
+                   closed=True, ec="gray", fc="gray")
+ax.add_patch(tri)
 
 # formatting
 plt.subplots_adjust(left=0.2, right=0.9, top=0.9, bottom=0.2)
-plt.ylabel(r"$m_2^{src}$ (M${}_{\odot}$)")
-plt.xlabel(r"$m_1^{src}$ (M${}_{\odot}$)")
-plt.ylim(y_min, y_max)
-plt.xlim(x_min, x_max)
-plt.grid()
-plt.minorticks_on()
-cbar = plt.colorbar()
-cbar.set_label(r"$\chi_{eff}$")
+ax.set_ylabel(r"$m_2^{src}$ (M${}_{\odot}$)")
+ax.set_xlabel(r"$m_1^{src}$ (M${}_{\odot}$)")
+ax.set_ylim(y_min, y_max)
+ax.set_xlim(x_min, x_max)
+ax.grid()
+ax.minorticks_on()
+cbar = plt.colorbar(cs, ax=ax)
+cbar.set_label(r"$\chi_\mathrm{eff}$")
 
 # save
 plt.savefig(opts.output_file, bbox_inches="tight", format="eps")
