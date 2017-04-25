@@ -100,17 +100,24 @@ plt_min = min(x_min, y_min)
 plt_max = max(x_max, y_max)
 
 k = 4
-x_step = (PISN_HIGH - PISN_LOW) / k
-x_range = numpy.arange(0, x_max + x_step, x_step) #+ PISN_LOW / x_step - x_step / 2
-y_step = (PISN_HIGH - PISN_LOW) / k / 2
-y_range = numpy.arange(0, y_max + y_step, y_step) #- PISN_LOW / y_step
+x_step = float(PISN_HIGH - PISN_LOW) / k
+x_range = numpy.arange(PISN_LOW - 2 * x_step, x_max + x_step, x_step) #+ PISN_LOW / x_step - x_step / 2
+y_step = float(PISN_HIGH - PISN_LOW) / k / 2
+y_range = numpy.arange(PISN_LOW - 5 * y_step, y_max + y_step, y_step) #- PISN_LOW / y_step
+
+def find_bin_index(z, x):
+     for u, v in enumerate(zip(x[:-1], x[1:])):
+         v_low, v_high = v
+         if z > v_low and z < v_high:
+             return u
+     return False
 
 efficiency = numpy.zeros((len(x_range), len(y_range)))
 counts = numpy.zeros((len(x_range), len(y_range)))
 for inject in injects:
 
-    i = int(inject.mass1_src - inject.mass1_src % x_step) / x_step
-    j = int(inject.mass2_src - inject.mass2_src % y_step) / y_step
+    i = find_bin_index(inject.mass1_src, x_range)
+    j = find_bin_index(inject.mass2_src, y_range)
 
     counts[i, j] += 1
 
@@ -164,11 +171,13 @@ plt.minorticks_on()
 
 cax, _ = cbar.make_axes(ax1) 
 cb2 = cbar.ColorbarBase(cax, cmap=cm.jet, norm=norm) 
-#cbar = plt.colorbar()
 if opts.region == "inside":
-    cb2.set_label(r"$\xi_\mathrm{both}^\mathrm{in}$")
+    region = "in"
 elif opts.region == "low":
-    cb2.set_label(r"$\xi_{1}^\mathrm{low}$")
+    region = opts.region
+if opts.parameter == "mass1_src":
+    parameter = "1"
+cb2.set_label(r"$\xi_\mathrm{%s}^\mathrm{%s}$" % (parameter, region))
 
 form = "eps" if opts.output_file.endswith(".eps") else None
 
