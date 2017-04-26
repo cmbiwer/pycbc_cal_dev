@@ -18,8 +18,9 @@ parser = argparse.ArgumentParser(usage=__file__ + " [--options]",
 parser.add_argument("--input-files", type=str, nargs="+", required=True)
 parser.add_argument("--output-file", type=str, required=True)
 parser.add_argument("--threshold", type=float, default=0.0)
-parser.add_argument("--region", choices=["inside", "low"], required=True)
-parser.add_argument("--parameter", choices=["mass1_src"], required=True)
+parser.add_argument("--region", choices=["inside", "low", "high"], required=True)
+parser.add_argument("--parameter", choices=["mass1_src", "mass2_src"], required=True)
+parser.add_argument("--plot-scatter", action="store_true")
 opts = parser.parse_args()
 
 # set figure parameters
@@ -56,7 +57,7 @@ PISN_HIGH = 130
 
 def in_region(low, high, region, parameter, current_parameter):
 
-    if parameter != current_parameter and "both" not in parameter:
+    if parameter != current_parameter:
         return False
 
     # in gap
@@ -65,10 +66,16 @@ def in_region(low, high, region, parameter, current_parameter):
     elif region == "inside":
         return False
 
-    # mass1_src below gap
+    # below gap
     if region == "low" and high < PISN_LOW:
         return True
     elif region == "low":
+        return False
+
+    # above gap
+    if region == "high" and low > PISN_HIGH:
+        return True
+    elif region == "high":
         return False
 
     return False
@@ -87,9 +94,10 @@ for interval, inject in zip(intervals, injected):
 fig1 = plt.figure()
 ax1 = fig1.add_subplot(111)#, aspect='equal')
 
+norm_low = -1.0 if opts.plot_scatter else 0.0
 cmap_name = "jet"
 my_cmap = cm.get_cmap(cmap_name)
-norm = mpl.colors.Normalize(0.0, 1.0)
+norm = mpl.colors.Normalize(norm_low, 1.0)
 
 # find min and max
 y_min = 0
@@ -124,20 +132,29 @@ for inject in injects:
     if inject.found:
         efficiency[i, j] += 1
 
-efficiency /= counts
-
-for i, x in enumerate(x_range):
-    for j, y in enumerate(y_range):
-
-        if y > x:
-            continue
-
-        if counts[i, j] < 1:
-            color = "white"
+    if opts.plot_scatter:
+        if inject.found:
+            ax1.scatter(inject.mass1_src, inject.mass2_src,
+                        c=inject.chi_eff, cmap=plt.get_cmap("afmhot_r"),
+                        s=4, vmin=-1, vmax=1, zorder=20, alpha=1.0)
         else:
-            color = my_cmap([norm(efficiency[i, j])])[0]
+            ax1.scatter(inject.mass1_src, inject.mass2_src, color="k",
+                        marker="x", s=4, zorder=19)
 
-        ax1.add_patch(patches.Rectangle((x, y), x_step, y_step, color=color, linewidth=0))
+if not opts.plot_scatter:
+    efficiency /= counts
+    for i, x in enumerate(x_range):
+        for j, y in enumerate(y_range):
+
+            if y > x:
+                continue
+
+            if counts[i, j] < 1:
+                color = "white"
+            else:
+                color = my_cmap([norm(efficiency[i, j])])[0]
+
+            ax1.add_patch(patches.Rectangle((x, y), x_step, y_step, color=color, linewidth=0))
 
 # set ticks
 n = 7
@@ -173,11 +190,16 @@ cax, _ = cbar.make_axes(ax1)
 cb2 = cbar.ColorbarBase(cax, cmap=cm.jet, norm=norm) 
 if opts.region == "inside":
     region = "in"
-elif opts.region == "low":
+elif opts.region in ["low", "high"]:
     region = opts.region
 if opts.parameter == "mass1_src":
     parameter = "1"
-cb2.set_label(r"$\xi_\mathrm{%s}^\mathrm{%s}$" % (parameter, region))
+elif opts.parameter == "mass2_src":
+    parameter = "2"
+if opts.plot_scatter:
+    cb2.set_label(r"$\chi_\mathrm{eff}$")
+else:
+    cb2.set_label(r"$\xi_\mathrm{%s}^\mathrm{%s}$" % (parameter, region))
 
 form = "eps" if opts.output_file.endswith(".eps") else None
 
