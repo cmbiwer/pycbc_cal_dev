@@ -1,16 +1,15 @@
 #! /usr/bin/env python
-""" Plots the mass range.
-"""
 
 import argparse
-import logging
 import matplotlib as mpl#; mpl.use("Agg")
+import matplotlib.colorbar as cbar
 import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 import numpy
 import pickle
-import pycbc
 from pycbc import conversions
+from pycbc import pisn
+from pycbc.results import pisn_plot
 
 # command line usage
 parser = argparse.ArgumentParser(usage=__file__ + " [--options]",
@@ -26,23 +25,13 @@ parser.add_argument("--parameter",
                              "mass1", "mass2", "distance", "redshift",
                              "chi_eff", "spin1z", "spin2z", "inclination",
                              "coa_phase", "polarization"])
+parser.add_argument("--region", choices=["inside", "low", "high"], default=None)
 parser.add_argument("--plot-min", type=float, default=None)
 parser.add_argument("--plot-max", type=float, default=None)
 opts = parser.parse_args()
 
 # set figure parameters
-rcParams = {
-    "text.usetex": True,
-    "figure.dpi": 600,
-    "font.size": 10,
-    "figure.figsize": (3.375, 2.5),
-    "axes.titlesize": 10,
-    "axes.labelsize": 10,
-    "xtick.labelsize": 8,
-    "ytick.labelsize": 8,
-    "legend.fontsize": 8,
-}
-mpl.rcParams.update(rcParams)
+pisn_plot.set_pisn_rcparams()
 
 # get data from pickle
 intervals, injected =  pickle.load(open(opts.input_file, "r"))
@@ -54,49 +43,68 @@ for inject in injected:
 
 # get number of injections
 n_injections = len(injected)
+print opts.input_file, "has", n_injections, "injections"
 
-#cmap_name = "afmhot_r"
-cmap_name = "jet"
-my_cmap = cm.get_cmap(cmap_name)
-norm = mpl.colors.Normalize(0, 35)
+# set scale for colorbar
+cmap_name = "afmhot_r"
+cmap = cm.get_cmap(cmap_name)
+norm = mpl.colors.Normalize(pisn_plot.snr_low, pisn_plot.snr_high)
 
-parameter = opts.parameter
+# create figure
+fig1 = plt.figure()
+ax1 = fig1.add_subplot(111)
 
+# loop over injections
 for interval, inject in zip(intervals, injected):
 
-    if abs((interval["mchirp_src_med"] - inject["mchirp_src"]) / inject["mchirp_src"]) < opts.threshold:
-        alpha = 0.2
-        zorder = 10
+    # determine if in region
+    low = interval[opts.parameter + "_low"]
+    med = interval[opts.parameter + "_med"]
+    high = interval[opts.parameter + "_high"]
+    if opts.region:
+        in_region = pisn_plot.in_region(low, high, opts.region, opts.parameter, opts.parameter)
     else:
-        alpha = 1.0
+        in_region = True
+
+    # get plot formating for region
+    if in_region:
         zorder = 20
+        color = cmap(norm(interval["snr_med"]))
+    else:
+        zorder = 10
+        color = "gray"
 
-    color = my_cmap(norm(interval["snr_med"])) # returns an rgba value
+    # plot
+    ax1.errorbar([inject[opts.parameter]],
+                 [med],
+                 yerr=[[med - low], [high - med]],
+                 ecolor=color, zorder=zorder)
+    if in_region:
+        ax1.scatter(inject[opts.parameter], med,
+                    c=interval["snr_med"], cmap=cmap,
+                    vmin=pisn_plot.snr_low, vmax=pisn_plot.snr_high,
+                    zorder=zorder, s=1)
 
-    plt.errorbar([inject[parameter]],
-                 [interval[parameter + "_med"]],
-                 yerr=[[interval[parameter + "_med"] - interval[parameter + "_low"]],
-                       [interval[parameter + "_high"] - interval[parameter + "_med"]]],
-                 ecolor=color, zorder=zorder, alpha=alpha)
-    plt.scatter(inject[parameter], interval[parameter + "_med"],
-                c=interval["snr_med"], cmap=plt.get_cmap(cmap_name),
-                vmin=0, vmax=35, zorder=zorder + 1, alpha=alpha, s=1)
 
-# get min and max for plotting
-y_max = numpy.array([intervals[i][parameter + "_high"] for i in range(n_injections)]).max()
-y_min = numpy.array([intervals[i][parameter + "_low"] for i in range(n_injections)]).min()
-x_max = numpy.array([injected[i][parameter] for i in range(n_injections)]).max()
-x_min = numpy.array([injected[i][parameter] for i in range(n_injections)]).min()
+# get min and max for finding limits of the axes
+y_max = numpy.array([intervals[i][opts.parameter + "_high"] for i in range(n_injections)]).max()
+y_min = numpy.array([intervals[i][opts.parameter + "_low"] for i in range(n_injections)]).min()
+x_max = numpy.array([injected[i][opts.parameter] for i in range(n_injections)]).max()
+x_min = numpy.array([injected[i][opts.parameter] for i in range(n_injections)]).min()
 plt_min = opts.plot_min if opts.plot_min is not None else min(0.9 * x_min, 1.1 * y_min)
 plt_max = opts.plot_max if opts.plot_max is not None else max(0.9 * x_max, 1.1 * y_max)
 
+# plot 1:1 ratio line
 equal_line = numpy.arange(plt_min, plt_max, (plt_max - plt_min) / 100.)
 plt.plot(equal_line, equal_line, "--")
 
-if parameter.startswith("mass1") or parameter.startswith("mass2"):
-    plt.hlines([60, 130], [plt_min, plt_min], plt_max, "r",
+# add PISN mass gap values if plotting component masses
+if opts.parameter.startswith("mass1") or opts.parameter.startswith("mass2"):
+    plt.hlines([pisn.pisn_low, pisn.pisn_high],
+               [plt_min, plt_min], plt_max, "r",
                linestyle="dashed")
 
+# get labels
 if opts.parameter == "mass1_src":
     y_label = r"$m_1^\mathrm{src}$"
 elif opts.parameter == "mass2_src":
@@ -108,6 +116,7 @@ elif opts.parameter == "mass2":
 else:
     y_label = opts.parameter
 
+# format plot
 plt.subplots_adjust(left=0.2, right=0.9, top=0.9, bottom=0.2)
 plt.ylabel(r"Recovered " + y_label)
 plt.xlabel(r"Injected " + y_label)
@@ -115,11 +124,14 @@ plt.ylim(plt_min, plt_max)
 plt.xlim(plt_min, plt_max)
 plt.grid()
 plt.minorticks_on()
-cbar = plt.colorbar()
-cbar.set_label("Median SNR")
 
-format = "eps" if opts.output_file.endswith(".eps") else None
+# add colorbar
+cax, _ = cbar.make_axes(ax1)
+cb2 = cbar.ColorbarBase(cax, cmap=cmap, norm=norm)
+cb2.set_label("Median Network SNR")
 
-plt.savefig(opts.output_file, bbox_inches="tight", format=format)
+# save
+form = "eps" if opts.output_file.endswith(".eps") else None
+plt.savefig(opts.output_file, bbox_inches="tight", format=form)
 plt.close()
 
