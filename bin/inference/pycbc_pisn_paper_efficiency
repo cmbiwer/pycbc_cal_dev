@@ -95,7 +95,7 @@ fig1 = plt.figure()
 ax1 = fig1.add_subplot(111)#, aspect='equal')
 
 norm_low = -1.0 if opts.plot_scatter else 0.0
-cmap_name = "jet"
+cmap_name = "afmhot_r"
 my_cmap = cm.get_cmap(cmap_name)
 norm = mpl.colors.Normalize(norm_low, 1.0)
 
@@ -187,7 +187,7 @@ plt.grid()
 plt.minorticks_on()
 
 cax, _ = cbar.make_axes(ax1) 
-cb2 = cbar.ColorbarBase(cax, cmap=cm.jet, norm=norm) 
+cb2 = cbar.ColorbarBase(cax, cmap=plt.get_cmap("afmhot_r"), norm=norm) 
 if opts.region == "inside":
     region = "in"
 elif opts.region in ["low", "high"]:
