@@ -9,13 +9,14 @@ import numpy
 import pickle
 from pycbc import conversions
 from pycbc import pisn
+from pycbc.io import pisn_io
 from pycbc.results import pisn_plot
 
 # command line usage
 parser = argparse.ArgumentParser(usage=__file__ + " [--options]",
                                  description=__doc__)
-parser.add_argument("--input-file", type=str, required=True,
-                    help="Input file.")
+parser.add_argument("--input-files", nargs="+", type=str, required=True,
+                    help="Input files.")
 parser.add_argument("--output-file", type=str, required=True,
                     help="Path to output plot.")
 parser.add_argument("--threshold", type=float, default=0.0)
@@ -34,7 +35,7 @@ opts = parser.parse_args()
 pisn_plot.set_pisn_rcparams()
 
 # get data from pickle
-intervals, injected =  pickle.load(open(opts.input_file, "r"))
+intervals, injected =  pisn_io.read_pisn_files(opts.input_files)
 
 # add q
 for inject in injected:
@@ -43,7 +44,7 @@ for inject in injected:
 
 # get number of injections
 n_injections = len(injected)
-print opts.input_file, "has", n_injections, "injections"
+print opts.input_files, "has", n_injections, "injections"
 
 # set scale for colorbar
 cmap_name = "afmhot_r"
@@ -96,13 +97,13 @@ plt_max = opts.plot_max if opts.plot_max is not None else max(0.9 * x_max, 1.1 *
 
 # plot 1:1 ratio line
 equal_line = numpy.arange(plt_min, plt_max, (plt_max - plt_min) / 100.)
-plt.plot(equal_line, equal_line, "--")
+ax1.plot(equal_line, equal_line, "--", zorder=100)
 
 # add PISN mass gap values if plotting component masses
 if opts.parameter.startswith("mass1") or opts.parameter.startswith("mass2"):
-    plt.hlines([pisn.pisn_low, pisn.pisn_high],
+    ax1.hlines([pisn.pisn_low, pisn.pisn_high],
                [plt_min, plt_min], plt_max, "r",
-               linestyle="dashed")
+               linestyle="dashed", zorder=99)
 
 # get labels
 if opts.parameter == "mass1_src":
@@ -124,6 +125,13 @@ plt.ylim(plt_min, plt_max)
 plt.xlim(plt_min, plt_max)
 plt.grid()
 plt.minorticks_on()
+
+# set ticks
+n = 7
+step = float(plt_max - plt_min) / n
+ax1.yaxis.set_ticks(numpy.arange(plt_min, plt_max + step, step))
+step = float(plt_max - plt_min) / n
+ax1.xaxis.set_ticks(numpy.arange(plt_min, plt_max + step, step))
 
 # add colorbar
 cax, _ = cbar.make_axes(ax1)
