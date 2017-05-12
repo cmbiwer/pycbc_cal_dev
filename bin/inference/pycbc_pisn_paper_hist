@@ -27,11 +27,13 @@ import numpy
 import pickle
 import pycbc
 from pycbc import conversions
+from pycbc.io import pisn_io
 
 # command line usage
 parser = argparse.ArgumentParser(usage=__file__ + " [--options]",
                                  description=__doc__)
-parser.add_argument("--input-files", type=str, nargs="+", required=True)
+parser.add_argument("--input-files-1", type=str, nargs="+", required=True)
+parser.add_argument("--input-files-2", type=str, nargs="+", required=True)
 parser.add_argument("--output-file", type=str, required=True)
 parser.add_argument("--threshold", type=float, default=0.0)
 parser.add_argument("--x-min", type=float, default=None)
@@ -57,18 +59,18 @@ mpl.rcParams.update(rcParams)
 
 line_styles = itertools.cycle(["-", "--", "-."])
 
-for input_file in opts.input_files:
+line_style = line_styles.next()
+intervals, _ =  pisn_io.read_pisn_files(opts.input_files_1)
+snrs = [interval["snr_med"] for interval in intervals]
+plt.hist(snrs, bins=10, histtype="step", zorder=20, linestyle=line_style)
 
-    intervals, _ =  pickle.load(open(input_file, "r"))
+line_style = line_styles.next()
+intervals, _ =  pisn_io.read_pisn_files(opts.input_files_2)
+snrs = [interval["snr_med"] for interval in intervals]
+plt.hist(snrs, bins=10, histtype="step", zorder=10, linestyle=line_style)
 
-    snrs = []
-    for interval in intervals:
-        snrs.append(interval["snr_med"])
-
-    plt.hist(snrs, bins=10, histtype="step", zorder=20, linestyle=line_styles.next())
-
-plt.ylabel(r"Counts")
-plt.xlabel(r"Median SNR")
+plt.ylabel(r"Number of Simulated Signals")
+plt.xlabel(r"Median Network SNR")
 
 plt.subplots_adjust(left=0.2, right=0.9, top=0.9, bottom=0.2)
 plt.ylim(0, opts.y_max)

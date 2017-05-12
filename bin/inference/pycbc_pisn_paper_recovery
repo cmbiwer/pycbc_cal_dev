@@ -113,7 +113,7 @@ elif opts.parameter == "mass2_src":
 elif opts.parameter == "mass1":
     y_label = r"$m_1^\mathrm{det}$"
 elif opts.parameter == "mass2":
-    y_label = r"$m_1^\mathrm{det}$"
+    y_label = r"$m_2^\mathrm{det}$"
 else:
     y_label = opts.parameter
 

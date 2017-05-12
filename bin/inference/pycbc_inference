@@ -59,6 +59,9 @@ parser.add_argument("--likelihood-evaluator", required=True,
 parser.add_argument("--seed", type=int, default=0,
                     help="Seed to use for the random number generator that "
                          "initially distributes the walkers. Default is 0.")
+parser.add_argument("--input-file", default=None,
+                    help="Use last iteration of input file as the initial "
+                         "proposal distribution.")
 
 # add sampler options
 option_utils.add_sampler_option_group(parser)
@@ -194,7 +197,7 @@ with ctx:
                                                          cp, section="prior")
 
     # set the initial positions
-    sampler.set_p0(initial_dists)
+    sampler.set_p0(initial_dists, input_file=opts.input_file)
 
     # setup checkpointing
     if opts.checkpoint_interval:

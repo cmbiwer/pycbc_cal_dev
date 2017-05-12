@@ -224,7 +224,7 @@ class BaseMCMCSampler(_BaseSampler):
     def pos(self):
         return self._pos
 
-    def set_p0(self, prior_distributions):
+    def set_p0(self, prior_distributions, input_file=None):
         """Sets the initial position of the walkers.
 
         Parameters
@@ -238,13 +238,26 @@ class BaseMCMCSampler(_BaseSampler):
         p0 : array
             An nwalkers x ndim array of the initial positions that were set.
         """
-        # loop over all walkers and then parameters
-        # find the distribution that has that parameter in it and draw a
-        # random value from the distribution
+
+        # create a (nwalker, ndim) array for initial positions
         nwalkers = self.nwalkers
         ndim = len(self.variable_args)
-        pmap = dict([[param, k] for k, param in enumerate(self.variable_args)])
         p0 = numpy.ones((nwalkers, ndim))
+
+        # if input file then use last iteration as initial poistion
+        if input_file:
+            fp = InferenceFile(input_file, "r")
+            samples = fp.read_samples(self.variable_args,
+                                      iteration=fp.niterations - 1)
+            fp.close()
+            for i, param in enumerate(self.variable_args):
+                p0[:, i] = samples[param]
+            return p0
+
+        # otherwise loop over all walkers and then parameters
+        # find the distribution that has that parameter in it and draw a
+        # random value from the distribution
+        pmap = dict([[param, k] for k, param in enumerate(self.variable_args)])
         n = 0
         accepted_vals = {}
         while n < nwalkers:

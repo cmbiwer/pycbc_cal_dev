@@ -34,6 +34,7 @@ from matplotlib import pyplot
 from multiprocessing import Pool
 import pycbc.results
 from pycbc.inference import option_utils
+from pycbc.inference import sampling_conversions
 from pycbc.io.inference_hdf import InferenceFile
 from pycbc.results.scatter_histograms import create_multidim_plot, \
     get_scale_fac
@@ -171,9 +172,12 @@ else:
     raise ValueError("At least one of frame-number or frame-step must be "
                      "provided.")
 
-samples = fp.read_samples(parameters, thin_start=thin_start,
+file_parameters, cs = sampling_conversions.get_conversions(
+                                         parameters, fp.variable_args)
+samples = fp.read_samples(file_parameters, thin_start=thin_start,
                           thin_end=thin_end, thin_interval=thinint,
                           iteration=itermask, flatten=False)
+samples = sampling_conversions.apply_conversions(samples, cs)
 
 # Get z-values
 if opts.z_arg is not None:
