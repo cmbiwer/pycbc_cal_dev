@@ -197,7 +197,14 @@ with ctx:
                                                          cp, section="prior")
 
     # set the initial positions
-    sampler.set_p0(initial_dists, input_file=opts.input_file)
+    if opts.input_file:
+        fp = InferenceFile(opts.input_file, "r")
+        samples = fp.read_samples(sampler.variable_args,
+                                  iteration=fp.niterations - 1)
+        fp.close()
+    else:
+        samples = None
+    sampler.set_p0(initial_dists, samples=samples)
 
     # setup checkpointing
     if opts.checkpoint_interval:
