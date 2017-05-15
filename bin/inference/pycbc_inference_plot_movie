@@ -276,6 +276,8 @@ else:
     make_frame = _make_frame
     mfunc = map
 
+print iterations
+
 logging.info("Making frames")
 mfunc(make_frame, range(len(iterations)))
 

@@ -25,7 +25,7 @@ parser.add_argument("--parameter",
                              "mchirp", "q",
                              "mass1", "mass2", "distance", "redshift",
                              "chi_eff", "spin1z", "spin2z", "inclination",
-                             "coa_phase", "polarization"])
+                             "coa_phase", "polarization", "tc", "ra", "dec"])
 parser.add_argument("--region", choices=["inside", "low", "high"], default=None)
 parser.add_argument("--plot-min", type=float, default=None)
 parser.add_argument("--plot-max", type=float, default=None)
@@ -114,6 +114,12 @@ elif opts.parameter == "mass1":
     y_label = r"$m_1^\mathrm{det}$"
 elif opts.parameter == "mass2":
     y_label = r"$m_2^\mathrm{det}$"
+elif opts.parameter == "mchirp_src":
+    y_label = r"$\mathcal{M}^\mathrm{src}$"
+elif opts.parameter == "chi_eff":
+    y_label = r"$\chi_\mathrm{eff}$"
+elif opts.parameter == "coa_phase":
+    y_label = r"$\phi_\mathrm{c}$"
 else:
     y_label = opts.parameter
 

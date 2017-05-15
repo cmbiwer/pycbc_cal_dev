@@ -438,6 +438,7 @@ setup (
                'bin/workflows/pycbc_make_inference_workflow',
                'bin/inference/pycbc_pisn_get_credible_interval',
                'bin/inference/pycbc_pisn_get_converged',
+               'bin/inference/pycbc_pisn_paper_convergence',
                'bin/inference/pycbc_pisn_plot_recovery',
                'bin/inference/pycbc_pisn_plot_hist',
                'bin/inference/pycbc_pisn_print_pkl',

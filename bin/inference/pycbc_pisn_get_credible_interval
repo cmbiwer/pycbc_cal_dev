@@ -89,7 +89,7 @@ for i, input_file in enumerate(opts.input_files):
 
     parameters = ["mchirp", "q", "spin1z", "spin2z", "redshift",
                   "distance", "polarization",
-                  "coa_phase", "tc"]
+                  "coa_phase", "tc", "ra", "dec"]
     parameters = parameters if opts.skip_inclination else parameters + ["inclination"]
 
     data = {}
