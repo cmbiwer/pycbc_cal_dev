@@ -35,8 +35,8 @@ from pycbc.waveform.utils import apply_fd_time_shift, taper_timeseries
 from pycbc.detector import Detector
 import lal as _lal
 
-# a list of all generator functions
-generator_functions = transforms.all_converters
+# a list of all classes with generator functions
+generator_classes = transforms.all_converters
 
 #
 >>>>>>> Use transforms.
