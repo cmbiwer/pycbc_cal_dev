@@ -506,6 +506,7 @@ class BaseMCMCSampler(_BaseSampler):
         if 'logjacobian' in samples.fieldnames:
             samples['prior'] -= samples['logjacobian']
         parameters = samples.fieldnames
+        samples = samples.to_array(axis=-1).astype(numpy.float64)
         samples_group = fp.stats_group
         # write data
         self._write_samples_group(
