@@ -31,14 +31,50 @@ class MtotalLT(Constraint):
     """
     name = "mtotal_lt"
     required_parameters = ["mass1", "mass2"]
+
     def _constraint(self, params):
         """ Evaluates constraint function.
         """
         return params["mass1"] + params["mass2"] < self.mtotal
 
+class EffectiveSpinSpace(Constraint):
+    """ Pre-defined constraint that check if effective spin parameters
+    are within accpetable values.
+    """
+    name = "effective_spin_space"
+    required_parameters = ["mass1", "mass2", "q", "xi1", "xi2",
+                           "chi_eff", "chi_a"]
+
+    def _constraint(self, params):
+        """ Evaluates constraint function.
+        """
+
+        # ensure that mass1 > mass2
+        if params["mass1"] < params["mass2"]:
+            return False
+
+        # constraint for primary mass
+        a = ((4.0 * params["q"]**2 + 3.0 * params["q"])
+                 / (4.0 + 3.0 * params["q"]) * params["xi1"])**2
+        b = ((1 + params["q"]**2) / 4
+                 * (params["chi_eff"] + params["chi_a"])**2)
+        if a + b > 1:
+            return False
+
+        # constraint for secondary mass
+        a = params["xi2"]**2
+        b = ((1 + params["q"]**2) / (4 * params["q"]**2)
+                 * (params["chi_eff"] - params["chi_a"])**2)
+        if a + b > 1:
+            return False
+
+        return True
+
+
 # list of all constraints
 constraints = {
     Constraint.name : Constraint,
     MtotalLT.name : MtotalLT,
+    EffectiveSpinSpace.name : EffectiveSpinSpace,
 }
 
