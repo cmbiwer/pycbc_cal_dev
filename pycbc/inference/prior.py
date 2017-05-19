@@ -61,9 +61,15 @@ class PriorEvaluator(object):
         A list of functions to test if parameter values obey multi-dimensional
         constraints.
 
+<<<<<<< HEAD
     Examples
     --------
     An example of creating a prior with constraint that total mass must
+=======
+    Example
+    -------
+    An example of creating a prior with constraint that componenet masses must
+>>>>>>> Add multi-dimensional constraints to PriorEvaluator.
     be below 30.
 
     >>> from pycbc.inference import distributions
