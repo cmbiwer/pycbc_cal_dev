@@ -1160,8 +1160,6 @@ def get_common_cbc_transforms(requested_params, variable_args,
             continue
         requested_params.update(converter.inputs)
         from_base_c.append(converter)
-        if 1:
-            variable_args.update(converter.outputs)
 
     # find all the tranforms for the required base parameters
     # calculated from sampling parameters
@@ -1171,8 +1169,7 @@ def get_common_cbc_transforms(requested_params, variable_args,
                 len(converter.outputs.intersection(requested_params)) > 0):
             requested_params.update(converter.inputs)
             to_base_c.append(converter)
-            if 1:
-                variable_args.update(converter.outputs)
+            variable_args.update(converter.outputs)
 
     # get list of transforms that converts sampling parameters to the base
     # parameters and then converts base parameters to the derived parameters
