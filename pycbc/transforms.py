@@ -450,30 +450,6 @@ class PrecessionMassSpinToCartesianSpin(BaseTransform):
             A dict with key as parameter name and value as numpy.array or float
             of transformed values.
         """
-
-        # find primary and secondary masses
-        # since functions in conversions.py map to primary/secondary masses
-        m_p = conversions.primary_mass(maps["mass1"], maps["mass2"])
-        m_s = conversions.secondary_mass(maps["mass1"], maps["mass2"])
-
-        # find primary and secondary xi
-        # can re-purpose spin functions for just a generic variable
-        xi_p = conversions.primary_spin(maps["mass1"], maps["mass2"],
-                                        maps["xi1"], maps["xi2"])
-        xi_s = conversions.secondary_spin(maps["mass1"], maps["mass2"],
-                                          maps["xi1"], maps["xi2"])
-
-        # convert using convention of conversions.py that is mass1 > mass2
-        spinx_p = conversions.spin1x_from_xi1_phi_a_phi_s(
-                           xi_p, maps["phi_a"], maps["phi_s"])
-        spiny_p = conversions.spin1y_from_xi1_phi_a_phi_s(
-                           xi_p, maps["phi_a"], maps["phi_s"])
-        spinx_s = conversions.spin2x_from_mass1_mass2_xi2_phi_a_phi_s(
-                           m_p, m_s, xi_s, maps["phi_a"], maps["phi_s"])
-        spiny_s = conversions.spin2y_from_mass1_mass2_xi2_phi_a_phi_s(
-                           m_p, m_s, xi_s, maps["phi_a"], maps["phi_s"])
-
-        # map parameters from primary/secondary to indices
         out = {}
         if isinstance(m_p, numpy.ndarray):
             mass1, mass2 = map(numpy.array, [maps["mass1"], maps["mass2"]])
@@ -1160,7 +1136,8 @@ def get_common_cbc_transforms(requested_params, variable_args,
             continue
         requested_params.update(converter.inputs)
         from_base_c.append(converter)
-        variable_args += list(converter.outputs)
+        if 0:
+            variable_args.update(converter.outputs)
 
     # find all the tranforms for the required base parameters
     # calculated from sampling parameters
@@ -1170,7 +1147,8 @@ def get_common_cbc_transforms(requested_params, variable_args,
                 len(converter.outputs.intersection(requested_params)) > 0):
             requested_params.update(converter.inputs)
             to_base_c.append(converter)
-            variable_args += list(converter.outputs)
+            if 0:
+                variable_args.update(converter.outputs)
 
     # get list of transforms that converts sampling parameters to the base
     # parameters and then converts base parameters to the derived parameters
