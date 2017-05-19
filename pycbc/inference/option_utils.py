@@ -19,11 +19,12 @@
 
 import logging
 import numpy
+import pycbc.inference.sampler
 from pycbc import transforms
+from pycbc.inference import constraint
+from pycbc.inference import likelihood
 from pycbc.io import InferenceFile
 from pycbc.workflow import WorkflowConfigParser
-import pycbc.inference.sampler
-from pycbc.inference import likelihood
 from pycbc.pool import choose_pool
 from pycbc.psd import from_cli_multi_ifos as psd_from_cli_multi_ifos
 from pycbc.strain import from_cli_multi_ifos as strain_from_cli_multi_ifos
@@ -129,7 +130,30 @@ def read_args_from_config(cp, section_group=None):
             # return val if it does not begin (end) with [ (])
             static_args[key] = convert_liststring_to_list(val) 
 
-    return variable_args, static_args
+    # get additional constraints to apply in prior
+    constaints = []
+    section = cp.options("{}constraints".format(section_prefix))
+    for subsection in  cp.get_subsections(section):
+        special_opts = ["name"]
+        name = cp.get_opt_tag(section, "name", subsection)
+        kwargs = {}
+        for key in cp.options(section + "-" + subsection):
+            if key == "name":
+                continue
+            val = cp.get_opt_tag(section, key, subsection)
+            if key == "required_parameters":
+                kwargs["required_parameters"] = val.split(
+                                                        bounded.VARARGS_DELIM)
+                continue
+            try:
+                val = float(val)
+            except:
+                pass
+            kwargs[key] = val
+            constaints.append(
+                         constraint.constraints[name](variable_args, **kwargs))
+
+    return variable_args, static_args, constraints
 
 
 #-----------------------------------------------------------------------------
