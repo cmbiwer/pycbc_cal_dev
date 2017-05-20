@@ -21,6 +21,7 @@
 import argparse
 import h5py
 import logging
+import numpy
 import os
 import Pegasus.DAX3 as dax
 import pycbc.workflow as wf
@@ -32,9 +33,9 @@ import socket
 import sys
 from pycbc_glue import segments
 from pycbc import results
+from pycbc import types
+from pycbc.events import triggers
 from pycbc.results import layout
-from pycbc.types import MultiDetOptionAction
-from pycbc.types import MultiDetOptionAppendAction
 from pycbc.workflow import WorkflowConfigParser
 
 def to_file(path, ifo=None):
@@ -72,26 +73,19 @@ parser.add_argument("--tags", nargs="+", default=[],
                     help="Tags to apend in various places.")
 parser.add_argument("--output-dir", default=None,
                     help="Path to output directory.")
-parser.add_argument("--output-map", required=True,
-                    help="Path to output map file.")
 parser.add_argument("--output-file", required=True,
                     help="Path to DAX file.")
 
-# input workflow file options
-parser.add_argument("--bank-file", default=None,
-                    help="HDF format template bank file.")
-parser.add_argument("--statmap-file", default=None,
-                    help="HDF format clustered coincident trigger "
-                         "result file.")
-parser.add_argument("--single-detector-triggers", nargs="+", default=None,
-                    action=MultiDetOptionAction,
-                    help="HDF format merged single detector trigger files.")
-
 # analysis time option
-# only required if not using input workflow file options
-parser.add_argument("--gps-end-time", type=float, nargs="+", default=None,
+# only required if not using input workflow input options
+parser.add_argument("--gps-end-time", type=float, default=None,
                     help="Times to analyze. If given workflow files then "
                          "this option is ignored.")
+
+# loudest trigger options
+# only required if using workflow input options
+parser.add_argument("--analyze-bin", type=str, default=None)
+parser.add_argument("--analyze-index", type=int, default=None)
 
 # input configuration file options
 parser.add_argument("--inference-config-file", type=str, required=True,
@@ -103,11 +97,12 @@ parser.add_argument("--prior-section", type=str, default="prior",
 
 # input frame files
 parser.add_argument("--frame-files", nargs="+", default=None,
-                    action=MultiDetOptionAppendAction,
+                    action=types.MultiDetOptionAppendAction,
                     help="GWF frame files to use.")
 
 # add option groups
 wf.add_workflow_command_line_group(parser)
+triggers.insert_loudest_triggers_option_group(parser)
 
 # parser command line
 opts = parser.parse_args()
@@ -148,20 +143,17 @@ logging.getLogger("").addHandler(log_file)
 logging.info("Created log file %s" % log_file_txt.storage_path)
 
 # sanity check that user is either using workflow or command line
-workflow_options = opts.bank_file != None \
-                   and opts.statmap_file != None \
-                   and opts.single_detector_triggers != None
+workflow_options = (opts.bank_file != None and opts.statmap_file != None
+                    and opts.sngl_trigger_files != None)
 if not workflow_options and not (opts.gps_end_time != None):
     raise ValueError("Must use either workflow options or --gps-end-time")
-
-# typecast str from command line to File instances
-config_file = to_file(opts.inference_config_file)
 
 # sections for output HTML pages
 rdir = layout.SectionNumber("results",
                             ["detector_sensitivity", "priors", "posteriors",
                              "samples", "workflow"])
 
+# make dirs
 wf.makedir(rdir.base)
 wf.makedir(rdir["workflow"])
 
@@ -172,14 +164,13 @@ wf_log_file = wf.File(workflow.ifos, "workflow-log", workflow.analysis_time,
 
 # Create the final log file
 log_file_html = wf.File(workflow.ifos, "WORKFLOW-LOG", workflow.analysis_time,
-                                           extension=".html",
-                                           directory=rdir["workflow"])
+                        extension=".html", directory=rdir["workflow"])
 
+# switch logging to file
 logging.basicConfig(format="%(asctime)s:%(levelname)s : %(message)s",
                     filename=wf_log_file.storage_path,
                     level=logging.INFO,
                     filemode="w")
-
 logfile = logging.FileHandler(filename=wf_log_file.storage_path, mode="w")
 logfile.setLevel(logging.INFO)
 formatter = logging.Formatter("%(asctime)s:%(levelname)s : %(message)s")
@@ -190,53 +181,41 @@ logging.info("Created log file %s" % wf_log_file.storage_path)
 # sanity check that user is either using workflow or command line
 workflow_options = opts.bank_file != None \
                    and opts.statmap_file != None \
-                   and opts.single_detector_triggers != None
+                   and opts.sngl_trigger_files != None
 if not workflow_options and not (opts.gps_end_time != None):
     raise ValueError("Must use either workflow options or --gps-end-time")
 
 # typecast str from command line to File instances
 config_file = to_file(opts.inference_config_file)
 
-# if using workflow files to find analysis times
+# if using workflow files then find trigger parameters
 if workflow_options:
 
     # typecast str from command line to File instances
     tmpltbank_file = to_file(opts.bank_file)
     coinc_file = to_file(opts.statmap_file)
-    single_triggers = []
-    for ifo in opts.single_detector_triggers:
-        fname = opts.single_detector_triggers[ifo]
-        single_triggers.append(to_file(fname, ifo=ifo))
+    single_triggers = [to_file(opts.sngl_trigger_files[ifo], ifo=ifo)
+                       for ifo in opts.sngl_trigger_files]
 
-    # get number of events to analyze
-    num_events = int(workflow.cp.get_opt_tags("workflow-inference",
-                                              "num-events", ""))
+    # get loudest triggers parameters in each bin
+    logging.info("Getting loudest events")
+    coinc_parameters = []
+    sngl_parameters = ["end_time"]
+    bank_parameters = []
+    bin_names, bin_data = triggers.loudest_triggers_from_cli(
+                              opts, coinc_parameters=coinc_parameters,
+                              sngl_parameters=sngl_parameters,
+                              bank_parameters=bank_parameters)
+    bin_idx = bin_names.index(opts.analyze_bin)
+    trigger_data = {key : val[opts.analyze_index]
+                    for key, val in bin_data[bin_idx].iteritems()}
 
-    # get detection statistic from statmap file
-    # if less events that requested to analyze in config file
-    # then analyze all events
-    f = h5py.File(opts.statmap_file, "r")
-    stat = f["foreground/stat"][:]
-    if len(stat) < num_events:
-        num_events = len(stat)
+    tc = numpy.mean([trigger_data["{}/end_time".format(ifo)]
+                     for ifo in workflow.ifos])
 
-    # get index for sorted detection statistic
-    sorting = stat.argsort()[::-1]
-
-    # get times for loudest events
-    times = {
-        f.attrs["detector_1"]: f["foreground/time1"][:][sorting][0:num_events],
-        f.attrs["detector_2"]: f["foreground/time2"][:][sorting][0:num_events],
-    }
-
-# else get analysis times from command line
+# else get trigger parameters from command line
 else:
-    times = dict([(ifo,opts.gps_end_time) for ifo in workflow.ifos])
-    num_events = len(opts.gps_end_time)
-
-# construct Executable for running sampler
-inference_exe = wf.Executable(workflow.cp, "inference", ifos=workflow.ifos,
-                              out_dir=opts.output_dir)
+    tc = opts.gps_end_time
 
 # read inference configuration file
 cp = WorkflowConfigParser([opts.inference_config_file])
@@ -259,113 +238,110 @@ for option in workflow.cp.options("workflow-inference"):
 all_parameters = [param for group in plot_parameters.values()
                   for param in group]
 
-# loop over number of loudest events to be analyzed
-for num_event in range(num_events):
+# set GPS times for reading in data around the event
+seconds_before_time = int(workflow.cp.get_opt_tags(
+                                        "workflow-inference",
+                                        "data-seconds-before-trigger", ""))
+seconds_after_time = int(workflow.cp.get_opt_tags(
+                                        "workflow-inference",
+                                        "data-seconds-after-trigger", ""))
+gps_start_time = int(tc) - seconds_before_time
+gps_end_time = int(tc) + seconds_after_time
 
-    # set GPS times for reading in data around the event
-    avg_end_time = sum([end_times[num_event] \
-                          for end_times in times.values()]) / len(times.keys())
-    seconds_before_time = int(workflow.cp.get_opt_tags(
-                                            "workflow-inference",
-                                            "data-seconds-before-trigger", ""))
-    seconds_after_time = int(workflow.cp.get_opt_tags(
-                                            "workflow-inference",
-                                            "data-seconds-after-trigger", ""))
-    gps_start_time = int(avg_end_time) - seconds_before_time
-    gps_end_time = int(avg_end_time) + seconds_after_time
+# get dict of segments for each IFO
+seg_dict = {ifo : segments.segmentlist([segments.segment(
+                  gps_start_time, gps_end_time)]) for ifo in workflow.ifos}
 
-    # get dict of segments for each IFO
-    seg_dict = {ifo : segments.segmentlist([segments.segment(
-                      gps_start_time, gps_end_time)]) for ifo in workflow.ifos}
+# get frame files from command line or datafind server
+frame_files = wf.FileList([])
+if opts.frame_files:
+    for ifo in workflow.ifos:
+        for path in opts.frame_files[ifo]:
+            frame_file = wf.File(
+                            ifo, "FRAME",
+                            segments.segment(gps_start_time, gps_end_time),
+                            file_url="file://" + path)
+            frame_file.PFN(frame_file.storage_path, site="local")
+            frame_files.append(frame_file)
+else:
+    frame_files, _, _, _ = wf.setup_datafind_workflow(workflow, seg_dict,
+                                                      "datafind")
 
-    # get frame files from command line or datafind server
-    frame_files = wf.FileList([])
-    if opts.frame_files:
-        for ifo in workflow.ifos:
-            for path in opts.frame_files[ifo]:
-                frame_file = wf.File(
-                                ifo, "FRAME",
-                                segments.segment(gps_start_time, gps_end_time),
-                                file_url="file://" + path)
-                frame_file.PFN(frame_file.storage_path, site="local")
-                frame_files.append(frame_file)
-    else:
-        frame_files, _, _, _ = wf.setup_datafind_workflow(workflow, seg_dict,
-                                                          "datafind")
+# make node for running sampler
+inference_exe = wf.Executable(workflow.cp, "inference", ifos=workflow.ifos,
+                              out_dir=opts.output_dir)
+node = inference_exe.create_node()
+node.add_opt("--instruments", " ".join(workflow.ifos))
+node.add_opt("--gps-start-time", gps_start_time)
+node.add_opt("--gps-end-time", gps_end_time)
+node.add_multiifo_input_list_opt("--frame-files", frame_files)
+node.add_opt("--channel-name", channel_names_str)
+node.add_input_opt("--config-file", config_file)
+analysis_time = segments.segment(gps_start_time, gps_end_time)
+inference_file = node.new_output_file_opt(analysis_time, ".hdf",
+                                          "--output-file",
+                                          tags=[str(opts.analyze_index)])
 
-    # make node for running sampler
-    node = inference_exe.create_node()
-    node.add_opt("--instruments", " ".join(workflow.ifos))
-    node.add_opt("--gps-start-time", gps_start_time)
-    node.add_opt("--gps-end-time", gps_end_time)
-    node.add_multiifo_input_list_opt("--frame-files", frame_files)
-    node.add_opt("--channel-name", channel_names_str)
-    node.add_input_opt("--config-file", config_file)
-    analysis_time = segments.segment(gps_start_time, gps_end_time)
-    inference_file = node.new_output_file_opt(analysis_time, ".hdf",
-                                              "--output-file",
-                                              tags=[str(num_event)])
+# add node to workflow
+workflow += node
 
-    # add node to workflow
-    workflow += node
+# files that prints information about the search event
+#if workflow_options:
+#    coinc_table_files = [mini.make_coinc_info(workflow, single_triggers,
+#                                     tmpltbank_file, coinc_file,
+#                                     opts.analyze_index, rdir.base,
+#                                     tags=opts.tags + [str(opts.analyze_index)])]
 
-    # files that prints information about the search event
-    if workflow_options:
-        coinc_table_files = [mini.make_coinc_info(workflow, single_triggers,
-                                         tmpltbank_file, coinc_file,
-                                         num_event, rdir.base,
-                                         tags=opts.tags + [str(num_event)])]
+# files for posteriors summary subsection
+base = "posteriors"
+post_table_files = inffu.make_inference_summary_table(
+                      workflow, inference_file, rdir[base],
+                      variable_args=all_parameters,
+                      analysis_seg=analysis_time,
+                      tags=opts.tags + [str(opts.analyze_index)])
+post_files = inffu.make_inference_posterior_plot(
+                      workflow, inference_file, rdir[base],
+                      parameters=all_parameters,
+                      analysis_seg=analysis_time,
+                      tags=opts.tags + [str(opts.analyze_index)])
+layout.single_layout(rdir[base], post_table_files + post_files)
 
-    # files for posteriors summary subsection
-    base = "posteriors"
-    post_table_files = inffu.make_inference_summary_table(
-                          workflow, inference_file, rdir[base],
-                          variable_args=all_parameters,
-                          analysis_seg=analysis_time,
-                          tags=opts.tags + [str(num_event)])
-    post_files = inffu.make_inference_posterior_plot(
-                          workflow, inference_file, rdir[base],
-                          parameters=all_parameters,
-                          analysis_seg=analysis_time,
-                          tags=opts.tags + [str(num_event)])
-    layout.single_layout(rdir[base], post_table_files + post_files)
+# files for posteriors 1d_posteriors subsection
+groups = plot_parameters.keys()
+groups.sort()
+for group in groups:
+    parameters = plot_parameters[group]
+    base = "posteriors/1d_{}_posteriors".format(group)
+    post_1d_files = inffu.make_inference_1d_posterior_plots(
+                      workflow, inference_file, rdir[base],
+                      parameters=parameters,
+                      analysis_seg=analysis_time,
+                      tags=opts.tags + [str(opts.analyze_index)])
+    layout.group_layout(rdir[base], post_1d_files)
 
-    # files for posteriors 1d_posteriors subsection
-    groups = plot_parameters.keys()
-    groups.sort()
-    for group in groups:
-        parameters = plot_parameters[group]
-        base = "posteriors/1d_{}_posteriors".format(group)
-        post_1d_files = inffu.make_inference_1d_posterior_plots(
-                          workflow, inference_file, rdir[base],
-                          parameters=parameters,
-                          analysis_seg=analysis_time,
-                          tags=opts.tags + [str(num_event)])
-        layout.group_layout(rdir[base], post_1d_files)
+# files for samples summary subsection
+base = "samples"
+samples_files = []
+for parameter in all_parameters:
+    samples_files += inffu.make_inference_samples_plot(
+                      workflow, inference_file, rdir[base],
+                      parameters=[parameter], analysis_seg=analysis_time,
+                      tags=opts.tags + [str(opts.analyze_index), parameter])
+layout.group_layout(rdir[base], samples_files)
 
-    # files for samples summary subsection
-    base = "samples"
-    samples_files = []
-    for parameter in all_parameters:
-        samples_files += inffu.make_inference_samples_plot(
-                          workflow, inference_file, rdir[base],
-                          parameters=[parameter], analysis_seg=analysis_time,
-                          tags=opts.tags + [str(num_event), parameter])
-    layout.group_layout(rdir[base], samples_files)
+# files for samples acceptance_rate subsection
+base = "samples/acceptance_rate"
+acceptance_files = inffu.make_inference_acceptance_rate_plot(
+                      workflow, inference_file, rdir[base],
+                      analysis_seg=analysis_time,
+                      tags=opts.tags + [str(opts.analyze_index)])
+layout.single_layout(rdir[base], acceptance_files)
 
-    # files for samples acceptance_rate subsection
-    base = "samples/acceptance_rate"
-    acceptance_files = inffu.make_inference_acceptance_rate_plot(
-                          workflow, inference_file, rdir[base],
-                          analysis_seg=analysis_time,
-                          tags=opts.tags + [str(num_event)])
-    layout.single_layout(rdir[base], acceptance_files)
-
-    # files for detector_sensitivity summary subsection
-    base = "detector_sensitivity"
-    psd_file = wf.make_spectrum_plot(workflow, [inference_file], rdir[base],
-                                     tags=opts.tags + [str(num_event)])
-    layout.single_layout(rdir[base], [psd_file])
+# files for detector_sensitivity summary subsection
+base = "detector_sensitivity"
+psd_file = wf.make_spectrum_plot(workflow, [inference_file], rdir[base],
+                                 tags=opts.tags + [str(opts.analyze_index)])
+layout.single_layout(rdir[base], [psd_file])
 
 # files for priors summary section
 base = "priors"
@@ -379,7 +355,6 @@ for subsection in cp.get_subsections(opts.prior_section):
 layout.group_layout(rdir[base], prior_files)
 
 # files for overall summary section
-summ_files = coinc_table_files if workflow_options else []
 summ_files = post_table_files + post_files
 for summ_file in summ_files:
     symlink_path(summ_file, rdir.base)
@@ -401,7 +376,7 @@ dep = dax.Dependency(parent=workflow.as_job, child=finalize_workflow.as_job)
 container._adag.addDependency(dep)
 
 # write dax
-container.save(filename=opts.output_file, output_map_path=opts.output_map)
+container.save(filename=opts.output_file)
 
 # save workflow configuration file
 base = rdir["workflow/configuration"]
