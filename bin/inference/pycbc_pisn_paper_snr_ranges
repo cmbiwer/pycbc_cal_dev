@@ -1,0 +1,98 @@
+#! /usr/bin/env python
+
+import argparse
+import matplotlib as mpl#; mpl.use("Agg")
+import matplotlib.colorbar as cbar
+import matplotlib.cm as cm
+import matplotlib.pyplot as plt
+import numpy
+import pickle
+from pycbc import conversions
+from pycbc import pisn
+from pycbc.io import pisn_io
+from pycbc.results import pisn_plot
+
+# command line usage
+parser = argparse.ArgumentParser(usage=__file__ + " [--options]",
+                                 description=__doc__)
+parser.add_argument("--input-files", nargs="+", type=str, required=True,
+                    help="Input files.")
+parser.add_argument("--output-file", type=str, required=True,
+                    help="Path to output plot.")
+parser.add_argument("--threshold", type=float, default=0.0)
+parser.add_argument("--parameter",
+                    choices=["mchirp_src", "mass1_src", "mass2_src",
+                             "mchirp", "q",
+                             "mass1", "mass2", "distance", "redshift",
+                             "chi_eff", "spin1z", "spin2z", "inclination",
+                             "coa_phase", "polarization", "tc", "ra", "dec"])
+parser.add_argument("--plot-min", type=float, default=None)
+parser.add_argument("--plot-max", type=float, default=None)
+parser.add_argument("--min-snr", type=float, default=0)
+parser.add_argument("--max-snr", type=float, default=numpy.inf)
+parser.add_argument("--step-snr", type=float)
+opts = parser.parse_args()
+
+# set figure parameters
+#pisn_plot.set_pisn_rcparams()
+
+# get data from pickle
+intervals, injected =  pisn_io.read_pisn_files(opts.input_files, min_snr=opts.min_snr, max_snr=opts.max_snr)
+
+print "total injections:", len(injected)
+
+# loop over regions
+for region in ["low", "inside", "high"]:
+    print region
+
+    # loop over SNR ranges
+    snrs = numpy.arange(opts.min_snr, opts.max_snr + opts.step_snr, opts.step_snr)
+    for snr_low, snr_high in zip(snrs[:-1], snrs[1:]):
+
+        # counters
+        n_false_positive = 0
+        n_true_positive = 0
+        n_region = 0
+        n_total = 0
+
+        # loop over signals
+        for interval, inject in zip(intervals, injected):
+            if interval["snr_med"] < snr_low or interval["snr_med"] > snr_high:
+                continue
+            n_total += 1
+
+            # see if recovered in region
+            low = interval[opts.parameter + "_low"]
+            med = interval[opts.parameter + "_med"]
+            high = interval[opts.parameter + "_high"]
+            in_region = pisn_plot.in_region(low, high, region,
+                                            opts.parameter, opts.parameter)
+
+            # see if injected value in credible interval
+            out_of_region_signal = True if (
+                  inject[opts.parameter] < pisn.pisn_low  or
+                  inject[opts.parameter] > pisn.pisn_high) else False
+
+            # count all in region
+            if in_region:
+                n_region += 1
+
+            # plot false-positives
+            if in_region and out_of_region_signal:
+                n_false_positive += 1
+                plt.plot([0 , 0], [low, high], "k")
+
+            # plot true-positives
+            elif in_region and not out_of_region_signal:
+                n_true_positive += 1
+                plt.plot([1, 1], [low, high], "r")
+
+            # plot everything else
+            else:
+                plt.plot([2, 2], [low, high], "g")
+
+        plt.ylim(52, 133)
+
+        print "snr range:", snr_low, snr_high, "total_in_bin:", n_total, "total_in_region:", n_region, "false_positives:", n_false_positive, "true_positives:", n_true_positive
+
+        #plt.show()

@@ -29,13 +29,17 @@ parser.add_argument("--parameter",
 parser.add_argument("--region", choices=["inside", "low", "high"], default=None)
 parser.add_argument("--plot-min", type=float, default=None)
 parser.add_argument("--plot-max", type=float, default=None)
+parser.add_argument("--min-snr", type=float, default=None)
+parser.add_argument("--max-snr", type=float, default=None)
 opts = parser.parse_args()
 
 # set figure parameters
 pisn_plot.set_pisn_rcparams()
 
 # get data from pickle
-intervals, injected =  pisn_io.read_pisn_files(opts.input_files)
+intervals, injected =  pisn_io.read_pisn_files(
+                           opts.input_files, min_snr=opts.min_snr,
+                           max_snr=opts.max_snr)
 
 # add q
 for inject in injected:
@@ -44,7 +48,7 @@ for inject in injected:
 
 # get number of injections
 n_injections = len(injected)
-print opts.input_files, "has", n_injections, "injections"
+print opts.input_files, "has", n_injections, "injections using SNR interval", opts.min_snr, opts.max_snr
 
 # set scale for colorbar
 cmap_name = "afmhot_r"
@@ -81,11 +85,11 @@ for interval, inject in zip(intervals, injected):
                  yerr=[[med - low], [high - med]],
                  ecolor=color, zorder=zorder)
     if in_region:
+        vmin = opts.min_snr if opts.min_snr else pisn_plot.snr_low
+        vmax = opts.max_snr if opts.max_snr else pisn_plot.snr_high
         ax1.scatter(inject[opts.parameter], med,
                     c=interval["snr_med"], cmap=cmap,
-                    vmin=pisn_plot.snr_low, vmax=pisn_plot.snr_high,
-                    zorder=zorder, s=1)
-
+                    vmin=vmin, vmax=vmax, zorder=zorder, s=1)
 
 # get min and max for finding limits of the axes
 y_max = numpy.array([intervals[i][opts.parameter + "_high"] for i in range(n_injections)]).max()
