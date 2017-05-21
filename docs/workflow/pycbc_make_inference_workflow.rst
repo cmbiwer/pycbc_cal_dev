@@ -259,7 +259,7 @@ If you want to run on the loudest triggers from a PyCBC coincident search workfl
         --output-map ${OUTPUT_MAP_PATH} \
         --bank-file ${BANK_PATH} \
         --statmap-file ${STATMAP_PATH} \
-        --single-detector-triggers ${SNGL_H1_PATHS} ${SNGL_L1_PATHS}
+        --sngl-detector-triggers ${SNGL_H1_PATHS} ${SNGL_L1_PATHS}
         --config-overrides workflow:start-time:${WORKFLOW_START_TIME} \
                            workflow:end-time:${WORKFLOW_END_TIME} \
                            workflow-inference:data-seconds-before-trigger:8 \
