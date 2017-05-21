@@ -45,3 +45,25 @@ def in_region(low, high, region, parameter, current_parameter):
 
     return False
 
+def inject_in_region(region, val):
+
+   # in gap
+    if region == "inside" and val > pisn.pisn_low and val < pisn.pisn_high:
+        return True
+    elif region == "inside":
+        return False
+
+    # below gap
+    if region == "low" and val < pisn.pisn_low:
+        return True
+    elif region == "low":
+        return False
+
+    # above gap
+    if region == "high" and val > pisn.pisn_high:
+        return True
+    elif region == "high":
+        return False
+
+    return False
+

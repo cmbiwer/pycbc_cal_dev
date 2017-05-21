@@ -53,6 +53,7 @@ for region in ["low", "inside", "high"]:
         n_false_positive = 0
         n_true_positive = 0
         n_region = 0
+        n_inject_in_region = 0
         n_total = 0
 
         # loop over signals
@@ -61,6 +62,11 @@ for region in ["low", "inside", "high"]:
                 continue
             n_total += 1
 
+            # see if injected in region
+            inject_in_region = pisn_plot.inject_in_region(region, inject[opts.parameter])
+            if inject_in_region:
+                n_inject_in_region += 1
+
             # see if recovered in region
             low = interval[opts.parameter + "_low"]
             med = interval[opts.parameter + "_med"]
@@ -68,22 +74,14 @@ for region in ["low", "inside", "high"]:
             in_region = pisn_plot.in_region(low, high, region,
                                             opts.parameter, opts.parameter)
 
-            # see if injected value in credible interval
-            out_of_region_signal = True if (
-                  inject[opts.parameter] < pisn.pisn_low  or
-                  inject[opts.parameter] > pisn.pisn_high) else False
-
-            # count all in region
-            if in_region:
-                n_region += 1
-
             # plot false-positives
-            if in_region and out_of_region_signal:
+            if in_region and not inject_in_region:
+                #print "false_positive", inject[opts.parameter], low, high
                 n_false_positive += 1
                 plt.plot([0 , 0], [low, high], "k")
 
             # plot true-positives
-            elif in_region and not out_of_region_signal:
+            elif in_region and inject_in_region:
                 n_true_positive += 1
                 plt.plot([1, 1], [low, high], "r")
 
@@ -93,6 +91,6 @@ for region in ["low", "inside", "high"]:
 
         plt.ylim(52, 133)
 
-        print "snr range:", snr_low, snr_high, "total_in_bin:", n_total, "total_in_region:", n_region, "false_positives:", n_false_positive, "true_positives:", n_true_positive
+        print "snr range:", snr_low, snr_high, "total_in_bin:", n_total, "total_inject_in_region:", n_inject_in_region, "total_in_region:", n_region, "false_positives:", n_false_positive, "true_positives:", n_true_positive
 
         #plt.show()
