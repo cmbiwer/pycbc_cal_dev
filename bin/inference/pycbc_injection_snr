@@ -1,0 +1,256 @@
+#! /usr/bin/env python
+# Copyright (C) 2017 Christopher M. Biwer
+#
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+# option) any later version.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General
+# Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+""" Draws from distributions.
+"""
+
+import os
+import argparse
+from glue.ligolw import lsctables
+from glue.ligolw import utils
+import logging
+import numpy
+import pycbc
+from pycbc import detector
+from pycbc import fft
+from pycbc import filter as _filter
+from pycbc import inference
+from pycbc import inject
+from pycbc import pnutils
+from pycbc import psd as _psd
+from pycbc import strain as _strain
+from pycbc import types
+from pycbc import waveform
+
+from glue.ligolw import ligolw, lsctables, table, utils
+
+class DefaultContentHandler(ligolw.LIGOLWContentHandler):
+    pass
+lsctables.use_in(DefaultContentHandler)
+
+
+def convert_liststring_to_list(lstring):
+    """ Checks if an argument of the configuration file is a string of a list
+    and returns the corresponding list (of strings)
+    """
+    if lstring[0] == "[" and lstring[-1] == "]":
+        lvalue = [str(lstring[1:-1].split(",")[n].strip().strip("'"))
+                      for n in range(len(lstring[1:-1].split(",")))]
+    return lvalue
+
+def pad_timeseries_to_integer_length(timeseries, sample_rate):
+    """ This function zero pads a time series so that its length is an integer
+    multiple of the sampling rate.
+
+    Padding is adding symmetically to the start and end of the time series.
+    If the number of samples to pad is odd then the end zero padding will have
+    one more sample than the start zero padding.
+    """
+
+    # calculate how many sample points needed to pad to get
+    # integer second time series
+    remainder = sample_rate - len(timeseries) % sample_rate
+    start_pad = int(remainder / 2)
+    end_pad = int(remainder - start_pad)
+
+    # make arrays of zeroes
+    start_array = numpy.zeros(start_pad)
+    end_array = numpy.zeros(end_pad)
+
+    # pad waveform with arrays of zeroes
+    initial_array = numpy.concatenate([start_array,timeseries,end_array])
+    return types.TimeSeries(initial_array, delta_t=timeseries.delta_t,
+                            epoch=timeseries.start_time,
+                            dtype=timeseries.dtype)
+
+# command line usage
+parser = argparse.ArgumentParser(usage=__file__ + " [--options]",
+                                 description=__doc__)
+
+# add data options
+parser.add_argument("--seed", type=int, default=0,
+                    help="Random seed.")
+parser.add_argument("--instruments", type=str, nargs="+", required=True,
+                    help="IFOs, eg. H1 L1.")
+
+# data conditioning options
+#! FIXME: add sanity check
+parser.add_argument("--low-frequency-cutoff", type=float, default=None)
+parser.add_argument("--psd-low-frequency-cutoff", type=float, default=None,
+                    help="Frequency to begin generating the PSD in Hz. This "
+                         "is the start frequency of the SNR calculation.")
+parser.add_argument("--psd-high-frequency-cutoff", type=float, default=None,
+                    help="Upper frequency to terminate the SNR "
+                         "calculation. Default will be Nyquist frequency, "
+                         "ie. int(sample_rate/2).")
+ 
+# verbose option
+parser.add_argument("--verbose", action="store_true", default=False,
+                    help="Print logging messages.")
+
+# add option groups
+fft.insert_fft_option_group(parser)
+_strain.insert_strain_option_group_multi_ifo(parser)
+_psd.insert_psd_option_group_multi_ifo(parser)
+
+# parse command line
+opts = parser.parse_args()
+
+# verify options are sane if using strain options
+if opts.psd_estimation:
+    _strain.verify_strain_options_multi_ifo(opts, parser, opts.instruments)
+if not opts.psd_estimation and (opts.frame_files or opts.frame_type
+                            or opts.frame_cache or opts.fake_strain):
+    raise KeyError("Must use --psd-estimation with frame options"
+                   "(--frame-files, --frame-type, --frame-cache, "
+                   "and --fake-strain).")
+
+# check that sample rates are the same
+for ifo in opts.instruments:
+    if opts.sample_rate[ifo] != opts.sample_rate[opts.instruments[0]]:
+        logging.warn('Sample rates must be equal for all IFOs.')
+        sys.exit()
+sample_rate = opts.sample_rate[opts.instruments[0]]
+
+# setup log
+pycbc.init_logging(opts.verbose)
+
+# set the seed
+numpy.random.seed(opts.seed)
+logging.info("Using seed %i", opts.seed)
+
+print opts.injection_file[0]
+
+# read XML file
+# read in injection LIGOLW XML file
+logging.info('Reading injection file')
+injections = inject.InjectionSet(opts.injection_file[0])
+
+# set upper frequency cutoff if not given
+if opts.psd_high_frequency_cutoff:
+    f_high = opts.psd_high_frequency_cutoff
+else:
+    f_high = int(sample_rate / 2)
+
+# get Detector for each IFO
+dets = dict([(ifo, detector.Detector(ifo)) for ifo in opts.instruments])
+
+# get strain time series
+# strain is used to estimate a PSD so if user supplies PSD
+# then genreate a zeroNoise TimeSeries to get length, delta_f, etc.
+if not opts.psd_estimation:
+    opts.fake_strain = "zeroNoise"
+strain_dict = _strain.from_cli_multi_ifos(opts, opts.instruments,
+                                          dyn_range_fac=pycbc.DYN_RANGE_FAC)
+
+#! FIXME: only do this if rescaling SNR
+# organize options for multi-IFO PSD
+# if not generating strain then set those related options to None
+stilde_dict = {}
+length_dict = {}
+delta_f_dict = {}
+low_frequency_cutoff_dict = {}
+for ifo in opts.instruments:
+    stilde_dict[ifo] = strain_dict[ifo].to_frequencyseries()
+    length_dict[ifo] = len(stilde_dict[ifo])
+    delta_f_dict[ifo] = stilde_dict[ifo].delta_f
+    low_frequency_cutoff_dict[ifo] = opts.psd_low_frequency_cutoff
+
+# get PSD
+logging.info('Generating PSDs')
+psd_dict = _psd.from_cli_multi_ifos(
+                              opts, length_dict, delta_f_dict,
+                              low_frequency_cutoff_dict, opts.instruments,
+                              strain_dict=strain_dict,
+                              dyn_range_factor=pycbc.DYN_RANGE_FAC,
+                              precision="double")
+
+# loop over injections
+for i, sim in enumerate(injections.table):
+
+    network_snr = 0
+
+    # parse the sim_inspiral waveform column
+    name, phase_order = inject.legacy_approximant_name(sim.waveform)
+
+    # generate waveform
+    #! FIXME: use a generator probably so does not have to be TD
+    logging.info("Generating waveform at %.3fMpc beginning at %.3fHz for "
+                 "SNR calculation", sim.distance,
+                 opts.psd_low_frequency_cutoff)
+    h_plus, h_cross = waveform.get_td_waveform(
+                            sim, approximant=name, phase_order=phase_order,
+                            f_lower=opts.psd_low_frequency_cutoff,
+                            delta_t=1.0 / sample_rate)
+
+    # zero pad to get integer second time series
+    h_plus = pad_timeseries_to_integer_length(h_plus, sample_rate)
+    h_cross = pad_timeseries_to_integer_length(h_cross, sample_rate)
+
+    # loop over Detectors
+    for ifo, det in dets.iteritems():
+
+        # get time delay to interferometer from center of the Earth
+        geocent_end_time = sim.geocent_end_time + sim.geocent_end_time_ns
+        time_delay = det.time_delay_from_earth_center(sim.longitude,
+                                                      sim.latitude,
+                                                      geocent_end_time)
+        end_time = geocent_end_time + time_delay
+
+        # get antenna pattern
+        f_plus, f_cross = det.antenna_pattern(sim.longitude, sim.latitude,
+                                              sim.polarization,
+                                              geocent_end_time)
+
+        # calculate strain
+        logging.info("Calculating strain for %s", ifo)
+        strain = f_plus * h_plus + f_cross * h_cross
+
+        # taper waveform
+        logging.info("Tapering strain for %s", ifo)
+        strain = waveform.taper_timeseries(strain, tapermethod=sim.taper)
+
+        # FFT strain
+        logging.info("FFT strain for %s", ifo)
+        strain_tilde = _filter.make_frequency_series(strain)
+
+        # interpolate PSD to waveform delta_f
+        if psd_dict[ifo].delta_f != strain_tilde.delta_f:
+            logging.info("Interpolating PSD for %s from %fHz to %fHz",
+                         ifo, psd_dict[ifo].delta_f, strain_tilde.delta_f)
+            psd_dict[ifo] = _psd.interpolate(
+                                       psd_dict[ifo], strain_tilde.delta_f)
+
+        # calculate sigma-squared SNR
+        logging.info("Calculating sigma for %s", ifo)
+        sigma_squared = _filter.sigmasq(
+                        pycbc.DYN_RANGE_FAC * strain_tilde,
+                        psd=psd_dict[ifo],
+                        low_frequency_cutoff=opts.psd_low_frequency_cutoff,
+                        high_frequency_cutoff=f_high)
+        logging.info("Sigma integrated from %.3f to %.3fHz for %s is %.3f",
+                     opts.psd_low_frequency_cutoff, f_high, ifo,
+                     numpy.sqrt(sigma_squared))
+
+        # include sigma in network SNR calculation
+        network_snr += sigma_squared
+
+    # distance scaling factor to get target network SNR
+    network_snr = numpy.sqrt(network_snr)
+    logging.info("Network SNR: %f %s", network_snr, opts.injection_file[0])
+
+# exit
+logging.info("Done")

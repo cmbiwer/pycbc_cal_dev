@@ -96,6 +96,9 @@ for sim in injections.table:
     if sim.mass1 / sim.mass2 > opts.max_q:
         continue
 
+    if sim.distance < 100:
+        continue
+
     sim_table.append(sim)
 
 # write

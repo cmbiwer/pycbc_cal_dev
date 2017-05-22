@@ -1,0 +1,218 @@
+#! /usr/bin/env python
+
+import argparse
+import logging
+import matplotlib as mpl#; mpl.use("Agg")
+import matplotlib.colorbar as cbar
+import matplotlib.cm as cm
+import matplotlib.patches as patches
+import matplotlib.pyplot as plt
+import numpy
+import pickle
+import pycbc
+from pycbc import conversions
+
+# command line usage
+parser = argparse.ArgumentParser(usage=__file__ + " [--options]",
+                                 description=__doc__)
+parser.add_argument("--input-files", type=str, nargs="+", required=True)
+parser.add_argument("--output-file", type=str, required=True)
+parser.add_argument("--threshold", type=float, default=0.0)
+parser.add_argument("--region", choices=["inside", "low", "high"], required=True)
+parser.add_argument("--parameter", choices=["mass1_src", "mass2_src"], required=True)
+parser.add_argument("--plot-scatter", action="store_true")
+parser.add_argument("--min-snr", type=float, default=None)
+parser.add_argument("--max-snr", type=float, default=None)
+opts = parser.parse_args()
+
+# set figure parameters
+rcParams = {
+    "text.usetex": True,
+    "figure.dpi": 600,
+    "font.size": 10,
+    "figure.figsize": (3.375, 2.5),
+    "axes.titlesize": 10,
+    "axes.labelsize": 10,
+    "xtick.labelsize": 8,
+    "ytick.labelsize": 8,
+    "legend.fontsize": 8,
+}
+mpl.rcParams.update(rcParams)
+
+# get data from pickle
+injected = []
+intervals = []
+for input_file in opts.input_files:
+    interval_i, injected_i =  pickle.load(open(input_file, "r"))
+    injected += injected_i
+    intervals += interval_i
+
+class Inject(object):
+    def __init__(self, mass1_src, mass2_src, chi_eff, found, interval=None):
+        self.mass1_src = mass1_src
+        self.mass2_src = mass2_src
+        self.chi_eff = chi_eff
+        self.found = found
+        self.interval = interval
+
+PISN_LOW = 52
+PISN_HIGH = 130
+
+def in_region(low, high, region, parameter, current_parameter):
+
+    if parameter != current_parameter:
+        return False
+
+    # in gap
+    if region == "inside" and low > PISN_LOW and high < PISN_HIGH:
+        return True
+    elif region == "inside":
+        return False
+
+    # below gap
+    if region == "low" and high < PISN_LOW:
+        return True
+    elif region == "low":
+        return False
+
+    # above gap
+    if region == "high" and low > PISN_HIGH:
+        return True
+    elif region == "high":
+        return False
+
+    return False
+
+injects = []
+for interval, inject in zip(intervals, injected):
+
+    found1 = in_region(interval["mass1_src_low"], interval["mass1_src_high"], opts.region, opts.parameter, "mass1_src")
+    found2 = in_region(interval["mass2_src_low"], interval["mass2_src_high"], opts.region, opts.parameter, "mass2_src")
+    found = found1 | found2
+
+    injects.append(Inject(inject["mass1_src"], inject["mass2_src"],
+                          inject["chi_eff"], found, interval=interval))
+
+
+fig1 = plt.figure()
+ax1 = fig1.add_subplot(111)#, aspect='equal')
+
+norm_low = -1.0 if opts.plot_scatter else 0.0
+cmap_name = "afmhot_r"
+my_cmap = cm.get_cmap(cmap_name)
+norm = mpl.colors.Normalize(norm_low, 1.0)
+
+# find min and max
+y_min = 0
+y_max = 140
+x_min = 0
+x_max = 350
+plt_min = min(x_min, y_min)
+plt_max = max(x_max, y_max)
+
+k = 4
+x_step = float(PISN_HIGH - PISN_LOW) / k
+x_range = numpy.arange(PISN_LOW - 2 * x_step, x_max + x_step, x_step) #+ PISN_LOW / x_step - x_step / 2
+y_step = float(PISN_HIGH - PISN_LOW) / k / 2
+y_range = numpy.arange(PISN_LOW - 5 * y_step, y_max + y_step, y_step) #- PISN_LOW / y_step
+
+def find_bin_index(z, x):
+     for u, v in enumerate(zip(x[:-1], x[1:])):
+         v_low, v_high = v
+         if z > v_low and z < v_high:
+             return u
+     return False
+
+efficiency = numpy.zeros((len(x_range), len(y_range)))
+counts = numpy.zeros((len(x_range), len(y_range)))
+for inject in injects:
+
+    if opts.min_snr and opts.max_snr:
+        if (inject.interval["snr_med"] <= opts.min_snr or
+                inject.interval["snr_med"] > opts.max_snr):
+            continue
+
+    i = find_bin_index(inject.mass1_src, x_range)
+    j = find_bin_index(inject.mass2_src, y_range)
+
+    counts[i, j] += 1
+
+    if inject.found:
+        efficiency[i, j] += 1
+
+    if opts.plot_scatter:
+        if inject.found:
+            ax1.scatter(inject.mass1_src, inject.mass2_src,
+                        c=inject.chi_eff, cmap=plt.get_cmap("afmhot_r"),
+                        s=4, vmin=-1, vmax=1, zorder=20, alpha=1.0)
+        else:
+            ax1.scatter(inject.mass1_src, inject.mass2_src, color="k",
+                        marker="x", s=4, zorder=19)
+
+print "total_counted", sum(counts)
+
+if not opts.plot_scatter:
+    efficiency /= counts
+    for i, x in enumerate(x_range):
+        for j, y in enumerate(y_range):
+
+            if y > x:
+                continue
+
+            if counts[i, j] < 1:
+                color = "white"
+            else:
+                color = my_cmap([norm(efficiency[i, j])])[0]
+
+            ax1.add_patch(patches.Rectangle((x, y), x_step, y_step, color=color, linewidth=0))
+
+# set ticks
+n = 7
+step = float(y_max - y_min) / n
+ax1.yaxis.set_ticks(numpy.arange(y_min, y_max + step, step))
+step = float(x_max - x_min) / n
+ax1.xaxis.set_ticks(numpy.arange(x_min, x_max + step, step))
+
+# plot lines
+equal_line = numpy.arange(plt_min, plt_max, (plt_max - plt_min) / 100.)
+ax1.plot(equal_line, equal_line, "-", color="gray")
+
+ax1.hlines([PISN_LOW, PISN_HIGH], [PISN_LOW, PISN_HIGH], x_max, "r",
+           linestyle="dashed", color="gray")
+ax1.vlines([PISN_LOW, PISN_HIGH], [PISN_LOW, PISN_HIGH], y_min, "r",
+           linestyle="dashed", color="gray")
+
+# add gray area for invalid region
+tri = plt.Polygon([[plt_min, plt_min], [plt_max, plt_max], [plt_min, plt_max]],
+                  closed=True, ec="gray", fc="gray", linewidth=0)
+ax1.add_patch(tri)
+
+# formatting
+plt.subplots_adjust(left=0.2, right=0.9, top=0.9, bottom=0.2)
+plt.ylabel(r"$m_2^\mathrm{src}$ (M${}_{\odot}$)")
+plt.xlabel(r"$m_1^\mathrm{src}$ (M${}_{\odot}$)")
+plt.ylim(y_min, y_max)
+plt.xlim(x_min, x_max)
+plt.grid()
+plt.minorticks_on()
+
+cax, _ = cbar.make_axes(ax1) 
+cb2 = cbar.ColorbarBase(cax, cmap=plt.get_cmap("afmhot_r"), norm=norm) 
+if opts.region == "inside":
+    region = "in"
+elif opts.region in ["low", "high"]:
+    region = opts.region
+if opts.parameter == "mass1_src":
+    parameter = "1"
+elif opts.parameter == "mass2_src":
+    parameter = "2"
+if opts.plot_scatter:
+    cb2.set_label(r"$\chi_\mathrm{eff}$")
+else:
+    cb2.set_label(r"$\xi_\mathrm{%s}^\mathrm{%s}$" % (parameter, region))
+
+form = "eps" if opts.output_file.endswith(".eps") else None
+
+plt.savefig(opts.output_file, bbox_inches="tight", format=form)
+plt.close()
+

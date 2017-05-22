@@ -42,11 +42,9 @@ for input_file in opts.input_files:
 
 # loop over data and plot
 for inject in injected:
-    alpha = 1.0
-    zorder = 20
     cs = ax.scatter(inject["mass1_src"], inject["mass2_src"],
                     c=inject["chi_eff"], cmap=plt.get_cmap("afmhot_r"),
-                    s=4, vmin=-1, vmax=1, zorder=zorder, alpha=alpha)
+                    s=4, vmin=-1, vmax=1, zorder=10)
 
 # find min and max
 y_min = 0
@@ -68,9 +66,9 @@ equal_line = numpy.arange(plt_min, plt_max, (plt_max - plt_min) / 100.)
 plt.plot(equal_line, equal_line, "-", color="gray")
 
 ax.hlines([52, 130], [52, 130], x_max, "r",
-          linestyle="dashed", color="gray")
+          linestyle="dashed", color="gray", zorder=12)
 ax.vlines([52, 130], [52, 130], y_min, "r",
-          linestyle="dashed", color="gray")
+          linestyle="dashed", color="gray", zorder=12)
 
 # add gray area for invalid region
 tri = plt.Polygon([[plt_min, plt_min], [plt_max, plt_max], [plt_min, plt_max]],
@@ -79,14 +77,14 @@ ax.add_patch(tri)
 
 # formatting
 plt.subplots_adjust(left=0.2, right=0.9, top=0.9, bottom=0.2)
-ax.set_ylabel(r"$m_2^{src}$ (M${}_{\odot}$)")
-ax.set_xlabel(r"$m_1^{src}$ (M${}_{\odot}$)")
+ax.set_ylabel(r"$m_2^\mathrm{src}$ (M${}_{\odot}$)")
+ax.set_xlabel(r"$m_1^\mathrm{src}$ (M${}_{\odot}$)")
 ax.set_ylim(y_min, y_max)
 ax.set_xlim(x_min, x_max)
-ax.grid()
 ax.minorticks_on()
 cbar = plt.colorbar(cs, ax=ax)
 cbar.set_label(r"$\chi_\mathrm{eff}$")
+ax.grid(zorder=11)
 
 # save
 plt.savefig(opts.output_file, bbox_inches="tight", format="eps")
