@@ -436,6 +436,7 @@ setup (
                'bin/pygrb/pycbc_make_grb_summary_page',
                'bin/pycbc_condition_strain',
                'bin/workflows/pycbc_make_inference_workflow',
+               'bin/inference/pycbc_injection_snr_plot',
                'bin/inference/pycbc_pisn_get_credible_interval',
                'bin/inference/pycbc_pisn_get_converged',
                'bin/inference/pycbc_pisn_paper_convergence',
