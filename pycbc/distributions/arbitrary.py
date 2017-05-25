@@ -81,6 +81,12 @@ class Arbitrary(bounded.BoundedDist):
     def kde(self):
         return self._kde
 
+    def _constraints(self, **kwargs):
+        """Returns True if constraints are satisfied. Returns False if
+        the constraints are not satisfied.
+        """
+        return True
+
     def _pdf(self, **kwargs):
         """Returns the pdf at the given values. The keyword arguments must
         contain all of parameters in self's params. Unrecognized arguments are
@@ -110,6 +116,8 @@ class Arbitrary(bounded.BoundedDist):
                 # in the transformed frame (the one that's calculated) then:
                 # p = J * p', where J is the Jacobian of going from p to p'
                 jacobian *= t.jacobian(samples)
+            if not self._constraints(kwargs):
+                return -numpy.inf
             # for scipy < 0.15.0, gaussian_kde.pdf = gaussian_kde.evaluate
             this_pdf = jacobian * self._kde.evaluate([kwargs[p]
                                                       for p in self._params])

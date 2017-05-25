@@ -142,7 +142,8 @@ class IndependentChiPChiEff(Arbitrary):
         Returns
         -------
         bool
-            Whether or not the values satisfy physical
+            Returns True if constraints are satisfied. Returns False if
+        the constraints are not satisfied.
         """
         mass1 = conversions._ensurearray(values['mass1'])
         mass2 = conversions._ensurearray(values['mass2'])
@@ -163,7 +164,7 @@ class IndependentChiPChiEff(Arbitrary):
         s2z = conversions.spin2z_from_mass1_mass2_chi_eff_chi_a(mass1, mass2,
             chi_eff, chi_a)
         test = ((s1x**2. + s1y**2. + s1z**2.) < 1.) & \
-               ((s2x**2. + s2y**2. + s2z**2.) < 1.)
+               ((s2x**2. + s2y**2. + s2z**2.) < 1.) & (mass1 > mass2)
         return test
 
     def __contains__(self, params):
