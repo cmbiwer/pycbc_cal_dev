@@ -29,6 +29,24 @@ for parameter estimation.
 import numpy
 from pycbc.io import record
 
+def cut(params, approximant=None):
+
+    # get parameters
+    parameters = params.keys()
+
+    # get total mass
+    if "q" in parameters:
+        mtotal = conversions.mtotal_from_mchirp_eta(
+                         params["mchirp"], conversions.eta_from_q(params["q"]))
+    else:
+        mtotal = params["mass1"] + params["mass2"]
+
+    # total mass cut
+    if mtotal > 500:
+        return False
+
+    return True
+
 class PriorEvaluator(object):
     """
     Callable class that calculates the prior.
@@ -86,7 +104,7 @@ class PriorEvaluator(object):
         self.distributions = distributions
         # store the constraints
         self.constraints = kwargs["constraints"] \
-                                  if "constraints" in kwargs.keys() else []
+                                  if "constraints" in kwargs.keys() else [cut]
 
         # check that all of the variable args are described by the given
         # distributions
