@@ -27,6 +27,7 @@ for parameter estimation.
 """
 
 import numpy
+from pycbc import conversions
 from pycbc.io import record
 
 def cut(params, approximant=None):
