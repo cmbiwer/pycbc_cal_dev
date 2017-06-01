@@ -19,7 +19,7 @@
 """
 
 import warning
-warnings.simplefilter("error", "RuntimeWarning")
+warnings.simplefilter("error", RuntimeWarning)
 
 import os
 import argparse
