@@ -143,7 +143,13 @@ class KombineSampler(BaseMCMCSampler):
         if 'update_interval' not in kwargs:
             # use the internal update interval
             kwargs['update_interval'] = self.update_interval
-        res = self._sampler.run_mcmc(niterations, p0=p0, **kwargs)
+        try:
+            res = self._sampler.run_mcmc(niterations, p0=p0, **kwargs)
+        except:
+            with InferenceFile("/home/cbiwer/projects/inference_debug/lvt/debug.hdf", "a") as fp:
+                self.write_state(fp)
+                self.attrs["debug"] = 1
+            import sys; exit
         p, lnpost, lnprop = res[0], res[1], res[2]
         # update the positions
         self._pos = p
