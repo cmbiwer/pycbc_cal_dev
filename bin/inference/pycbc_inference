@@ -18,6 +18,9 @@
 """ Runs a sampler to find the posterior distributions.
 """
 
+import warning
+warnings.simplefilter("error", "RuntimeWarning")
+
 import os
 import argparse
 import logging
