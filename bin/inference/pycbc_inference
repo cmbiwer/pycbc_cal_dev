@@ -295,11 +295,11 @@ with ctx:
 
             # include a try-except statement because all samples might not
             # have this implemented
-            try:
-                sampler.write_state(fp)
-            except NotImplementedError:
-                logging.warn("Writing state is not implemented for %s",
-                             sampler.name)
+#            try:
+#                sampler.write_state(fp)
+#            except NotImplementedError:
+#                logging.warn("Writing state is not implemented for %s",
+#                             sampler.name)
 
             if not opts.checkpoint_fast or end == opts.niterations:
 
