@@ -1,0 +1,328 @@
+#! /usr/bin/env python
+""" Plots the recovery of injections from a population of signals.
+"""
+
+import argparse
+import logging
+import numpy
+import pycbc
+from pycbc import inject
+from pycbc.inference import option_utils
+
+# parse command line
+parser = argparse.ArgumentParser(usage=__file__ + " [--options]",
+                                 description=__doc__)
+parser.add_argument("--output-file", type=str, required=True,
+                    help="Path to save output plot.")
+parser.add_argument("--verbose", action="store_true",
+                    help="Print statements.")
+parser.add_argument("--injection-parameters", nargs="+", default=None)
+parser.add_argument("--quantiles", nargs="+", type=float, default=[0.05, 0.95])
+option_utils.add_inference_results_option_group(parser)
+option_utils.add_scatter_option_group(parser)
+opts = parser.parse_args()
+
+# set logging
+pycbc.init_logging(opts.verbose)
+
+# make sure only one parameter
+assert(len(opts.parameters) == 1)
+
+# get results
+r = option_utils.results_from_cli(opts)
+
+# get likelihood statistic values
+if opts.z_arg is not None:
+    logging.info("Getting likelihood stats")
+
+    # lists to hold z-axis values and labels for each input file
+    z0 = []
+    z1 = []
+
+    # loop over each input file and append z-axis values and labels to lists
+    for fp in r[0]:
+        likelihood_stats = fp.read_likelihood_stats(
+            thin_start=opts.thin_start, thin_end=opts.thin_end,
+            thin_interval=opts.thin_interval, iteration=opts.iteration)
+        fp_zvals, fp_zlbl = option_utils.get_zvalues(fp, opts.z_arg,
+                                                   likelihood_stats)
+        z0.append(fp_zvals)
+        z1.append(fp_zlbl)
+#        f.close()
+
+# else there are no z-axis values
+else:
+    z0 = len(r[0]) * [None]
+    z1 = len(r[0]) * [None]
+#    for fp in r[0]:
+#        fp.close()
+
+# loop over input files
+for fp, parameters, labels, samples, zvals, zlbl in zip(r[0], r[1], r[2], r[3], z0, z1):
+
+    # read injection file
+    cmd = fp.attrs["cmd"].split()
+    idx = cmd.index("--injection-file")
+    injection_path = cmd[idx + 1]
+    logging.info("Reading injection file")
+    inj = inject.InjectionSet(injection_path)
+
+    # can only handle injection file with one injection
+    assert(len(inj.table) == 1)
+
+    # injection file can have different names for the same parameter
+    injection_parameters = opts.injection_parameters if opts.injection_parameters else parameters
+
+    # loop over parameters
+    for param, inj_param in zip(parameters, injection_parameters):
+
+        # get injection value for parameter
+        inj_val = getattr(inj.table[0], injection_parameters[0])
+
+        # get min and max quantiles
+        quantiles = numpy.array(opts.quantiles)
+
+        x = samples[param]
+        quantiles = numpy.array([numpy.percentile(x, 100 * q)
+                                 for q in opts.quantiles])
+
+        med = numpy.median(x)
+        high = quantiles.max()
+        low = quantiles.min()
+
+        print inj_val, high, med, low
+
+import sys; sys.exit()
+
+#    print inj_val
+#    print fp
+#    print parameters
+#    print labels
+#    print samples
+#    print zvals
+#    print zlbl
+
+#plt.errorbar([inject_val],
+#             [med],
+#             yerr=[[med - low], [high - med]],
+#             ecolor=color, zorder=zorder)
+
+
+#plt.scatter(inj.inject[opts.parameter], med,
+#            c=inj.interval["snr_med"], cmap=cmap,
+#            vmin=opts.vmin, vmax=opts.vmax, s=1, alpha=0)
+
+
+# done
+logging.info("Finished!")
+
+import sys; sys.exit()
+
+# set figure parameters
+pisn_plot.set_pisn_rcparams()
+
+# get data from pickle
+intervals, injected =  pisn_io.read_pisn_files(
+                           opts.input_files, min_snr=opts.min_snr,
+                           max_snr=opts.max_snr)
+
+# add q
+for inject in injected:
+    inject["q"] = conversions.q_from_mass1_mass2(inject["mass1"],
+                                                 inject["mass2"])
+
+# get number of injections
+n_injections = len(injected)
+print opts.input_files, "has", n_injections, "injections using SNR interval", opts.min_snr, opts.max_snr
+
+# set scale for colorbar
+cmap_name = "afmhot_r"
+cmap = cm.get_cmap(cmap_name)
+norm = mpl.colors.Normalize(pisn_plot.snr_low, pisn_plot.snr_high)
+
+# create figure
+fig1 = plt.figure()
+ax1 = fig1.add_subplot(111)
+
+# class for sorting
+class Inject(object):
+    def __init__(self, inject, interval):
+        self.inject = inject
+        self.interval = interval
+injs = [Inject(inject, interval) for interval, inject in zip(intervals, injected)]
+injs.sort(key=lambda x: x.interval["snr_med"], reverse=False)
+
+# loop over injections
+for inj in injs:
+
+    # determine if in region
+    low = inj.interval[opts.parameter + "_low"]
+    med = inj.interval[opts.parameter + "_med"]
+    high = inj.interval[opts.parameter + "_high"]
+    if opts.plot_all:
+        in_region = True
+    elif (inj.inject[opts.parameter] < pisn.pisn_low or inj.inject[opts.parameter] > pisn.pisn_high) and \
+           (inj.interval["snr_med"] > opts.min_snr and inj.interval["snr_med"] < opts.max_snr):
+        in_region = True
+    else:
+        continue
+
+    # get plot formating for region
+    if not inj.inject["good"] and opts.show_bad:
+        zorder = 9
+        color = "gray"
+    elif in_region:
+        zorder = 10
+        color = cmap(norm(inj.interval["snr_med"]))
+    else:
+        zorder = 9
+        color = "gray"
+
+    # plot
+    ax1.errorbar([inj.inject[opts.parameter]],
+                 [med],
+                 yerr=[[med - low], [high - med]],
+                 ecolor=color, zorder=zorder)
+    if in_region:
+        vmin = opts.min_snr if opts.min_snr else pisn_plot.snr_low
+        vmax = opts.max_snr if opts.max_snr else pisn_plot.snr_high
+        ax1.scatter(inj.inject[opts.parameter], med,
+                    c=inj.interval["snr_med"], cmap=cmap,
+                    vmin=vmin, vmax=vmax, zorder=zorder, s=1, alpha=0)
+
+# get min and max for finding limits of the axes
+y_max = numpy.array([intervals[i][opts.parameter + "_high"] for i in range(n_injections)]).max()
+y_min = numpy.array([intervals[i][opts.parameter + "_low"] for i in range(n_injections)]).min()
+x_max = numpy.array([injected[i][opts.parameter] for i in range(n_injections)]).max()
+x_min = numpy.array([injected[i][opts.parameter] for i in range(n_injections)]).min()
+plt_min = opts.plot_min if opts.plot_min is not None else min(0.9 * x_min, 1.1 * y_min)
+plt_max = opts.plot_max if opts.plot_max is not None else max(0.9 * x_max, 1.1 * y_max)
+
+# plot 1:1 ratio line
+equal_line = numpy.arange(plt_min, plt_max, (plt_max - plt_min) / 100.)
+ax1.plot(equal_line, equal_line, "--", color="gray", zorder=100)
+
+# add PISN mass gap values if plotting component masses
+if opts.parameter.startswith("mass1") or opts.parameter.startswith("mass2"):
+    ax1.hlines([pisn.pisn_low, pisn.pisn_high],
+               [plt_min, plt_min], plt_max, "magenta",
+               linestyle="dashed", zorder=99)
+
+# get labels
+if opts.parameter == "mass1_src":
+    y_label = r"$m_1^\mathrm{src}$"
+elif opts.parameter == "mass2_src":
+    y_label = r"$m_2^\mathrm{src}$"
+elif opts.parameter == "mass1":
+    y_label = r"$m_1^\mathrm{det}$"
+elif opts.parameter == "mass2":
+    y_label = r"$m_2^\mathrm{det}$"
+elif opts.parameter == "mchirp_src":
+    y_label = r"$\mathcal{M}^\mathrm{src}$"
+elif opts.parameter == "chi_eff":
+    y_label = r"$\chi_\mathrm{eff}$"
+elif opts.parameter == "coa_phase":
+    y_label = r"$\phi_\mathrm{c}$"
+elif opts.parameter == "redshift":
+    y_label = r"\$z\$"
+else:
+    y_label = opts.parameter
+
+# format plot
+plt.subplots_adjust(left=0.2, right=0.9, top=0.9, bottom=0.2)
+plt.ylabel(r"Recovered " + y_label)
+plt.xlabel(r"Injected " + y_label)
+plt.ylim(plt_min, plt_max)
+plt.xlim(plt_min, plt_max)
+plt.grid()
+plt.minorticks_on()
+
+# set ticks
+n = 7
+step = float(plt_max - plt_min) / n
+ax1.yaxis.set_ticks(numpy.arange(plt_min, plt_max + step, step))
+step = float(plt_max - plt_min) / n
+ax1.xaxis.set_ticks(numpy.arange(plt_min, plt_max + step, step))
+
+# add colorbar
+cax, _ = cbar.make_axes(ax1)
+cb2 = cbar.ColorbarBase(cax, cmap=cmap, norm=norm)
+cb2.set_label("Median Network SNR")
+
+# save
+form = "eps" if opts.output_file.endswith(".eps") else None
+plt.savefig(opts.output_file, bbox_inches="tight", format=form)
+plt.close()
+
+if opts.output_file_for_widths:
+
+    # create figure
+    fig1 = plt.figure()
+    ax1 = fig1.add_subplot(111)
+
+    norm = mpl.colors.Normalize(-1, 1.)
+
+    for inj in injs:
+
+        if opts.plot_all:
+            in_region = True
+        elif (inj.inject[opts.parameter] < pisn.pisn_low or inj.inject[opts.parameter] > pisn.pisn_high) and \
+               (inj.interval["snr_med"] > opts.min_snr and inj.interval["snr_med"] < opts.max_snr):
+            in_region = True
+        else:
+            continue
+
+        if not inj.inject["good"] and opts.show_bad:
+            zorder = 9
+            color = "gray"
+        else:
+            zorder = 10
+            color = cmap(norm(inj.inject["chi_eff"]))
+
+        # plot
+        low = inj.interval[opts.parameter + "_low"]
+        med = inj.interval[opts.parameter + "_med"]
+        high = inj.interval[opts.parameter + "_high"]
+        ax1.errorbar([inj.interval["snr_med"]],
+                     [med],
+                     yerr=[[med - low], [high - med]],
+                     ecolor=color, zorder=zorder)
+        ax1.scatter(inj.interval["snr_med"], med,
+                    c=inj.inject["chi_eff"], cmap=plt.get_cmap("afmhot_r"),
+                    vmin=-1, vmax=1, zorder=zorder, s=1, alpha=0)
+
+    # add PISN mass gap values if plotting component masses
+    if opts.parameter.startswith("mass1") or opts.parameter.startswith("mass2"):
+        ax1.hlines([pisn.pisn_low, pisn.pisn_high],
+                   [0, 0], opts.plot_snr_max, "magenta",
+                   linestyle="dashed", zorder=99)
+
+    # format plot
+    plt.subplots_adjust(left=0.2, right=0.9, top=0.9, bottom=0.2)
+    plt.ylabel(r"Recovered " + y_label)
+    plt.xlabel(r"Median Network SNR")
+    plt.ylim(pisn.pisn_low - 2, pisn.pisn_low - 2 + 7 * 12)
+    plt.xlim(opts.plot_snr_min, opts.plot_snr_max)
+    plt.grid()
+    plt.minorticks_on()
+
+    # set ticks
+    n = 7
+    y_min = pisn.pisn_low - 2
+    y_max = pisn.pisn_low - 2 + 7 * 12
+    step = float(y_max - y_min) / n
+    ax1.yaxis.set_ticks(numpy.arange(y_min, y_max + step, step))
+    step = float(opts.plot_snr_max - opts.plot_snr_min) / n
+    ax1.xaxis.set_ticks(numpy.arange(opts.plot_snr_min, opts.plot_snr_max + step, step))
+    ax1.xaxis.set_major_formatter(FormatStrFormatter('%.1f'))
+
+    # add colorbar
+    cax, _ = cbar.make_axes(ax1)
+    cb2 = cbar.ColorbarBase(cax, cmap=cmap, norm=norm)
+    cb2.set_label(r"Injected $\chi_\mathrm{eff}$")
+
+    # save
+    form = "eps" if opts.output_file.endswith(".eps") else None
+    plt.savefig(opts.output_file_for_widths, bbox_inches="tight", format=form)
+    plt.close()
+
